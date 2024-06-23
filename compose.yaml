@@ -1,0 +1,89 @@
+services:
+  fess01:
+    container_name: fess01
+    image: ghcr.io/codelibs/fess:snapshot
+    ports:
+      - "8080:8080"
+    depends_on:
+      - search01
+      - clip_server
+    environment:
+      - "ES_HTTP_URL=http://search01:9200"
+      - "FESS_DICTIONARY_PATH=/usr/share/opensearch/config/dictionary/"
+      - "FESS_JAVA_OPTS=-Dfess.config.crawler.document.cache.enabled=false -Dfess.config.adaptive.load.control=0 -Dfess.config.query.additional.response.fields=searcher -Dfess.config.job.system.property.filter.pattern=fess.multimodal.*|clip.* -Dfess.config.index.user.initial_password=admin -Dfess.multimodal.content.field=content_vector -Dfess.multimodal.content.dimension=512 -Dfess.multimodal.content.method=hnsw -Dfess.multimodal.content.engine=lucene -Dfess.multimodal.content.space_type=cosinesimil -Dfess.multimodal.min_score=0.5 -Dclip.server.endpoint=http://clip_server:51000"
+#      - "FESS_LOG_LEVEL=debug"
+    networks:
+      - multimodal_net
+    volumes:
+      - ./data/fess/opt/fess:/opt/fess
+      - ./data/fess/var/lib/fess:/var/lib/fess
+      - ./data/fess/var/log/fess:/var/log/fess
+      - ./data/fess/usr/share/fess/app/WEB-INF/plugin:/usr/share/fess/app/WEB-INF/plugin
+      - ./data/fess/usr/share/fess/app/WEB-INF/view/multimodal:/usr/share/fess/app/WEB-INF/view/multimodal
+#      - ./data/fiftyone:/home/fiftyone
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+  search01:
+    container_name: search01
+    image: ghcr.io/codelibs/fess-opensearch:2.14.0
+    environment:
+      - node.name=search01
+      - discovery.seed_hosts=search01
+      - cluster.initial_cluster_manager_nodes=search01
+      - cluster.name=fess-es
+      - bootstrap.memory_lock=true
+      - node.roles=cluster_manager,data,ingest,ml
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "DISABLE_INSTALL_DEMO_CONFIG=true"
+      - "DISABLE_SECURITY_PLUGIN=true"
+      - "FESS_DICTIONARY_PATH=/usr/share/opensearch/config/dictionary"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65535
+        hard: 65535
+    volumes:
+      - ./data/opensearch/usr/share/opensearch/data:/usr/share/opensearch/data
+      - ./data/opensearch/usr/share/opensearch/config/dictionary:/usr/share/opensearch/config/dictionary
+    ports:
+      - 9200:9200
+    networks:
+      - multimodal_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+  clip_server:
+    container_name: clip_server
+    image: jinaai/clip-server
+    ports:
+      - "51000:51000"
+    volumes:
+      - ./data/clip_server/cache:/home/cas/.cache
+      - ./config/clip.yaml:/home/cas/clip_config.yaml
+    environment:
+      - JINA_HIDE_SURVEY=1
+      - JINA_LOG_LEVEL=DEBUG
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - capabilities: [gpu]
+    command: ["/home/cas/clip_config.yaml"]
+    networks:
+      - multimodal_net
+
+networks:
+  multimodal_net:
+    driver: bridge
+
