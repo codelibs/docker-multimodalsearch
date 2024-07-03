@@ -51,6 +51,22 @@ docker compose -f compose.yaml down
 
 To deploy in a production environment, update `compose-production.yaml` with your domain, replacing `multimodal.codelibs.org`.
 
+## Additional Information
+
+### Test Data
+
+To download 1000 images for testing, use the following commands. The images will be available in the `/home/fiftyone/validation/data` directory of the Fess container.
+
+1. Install FiftyOne:
+    ```sh
+    pip install fiftyone
+    ```
+
+2. Download the dataset:
+    ```sh
+    fiftyone zoo datasets load open-images-v7 --split validation --kwargs max_samples=1000 -d ./data/fiftyone
+    ```
+
 ---
 
 For additional support or information, please visit the [Fess documentation](https://fess.codelibs.org/).
