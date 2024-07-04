@@ -2,10 +2,6 @@
 
 [Fess](https://fess.codelibs.org/) is an Enterprise Search Server. This Docker environment sets up a MultiModal Search Server on Fess.
 
-## Public Site
-
-Visit our public site at [multimodal.codelibs.org](https://multimodal.codelibs.org/).
-
 ## Getting Started
 
 ### Prerequisites
