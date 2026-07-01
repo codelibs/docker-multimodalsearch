@@ -10,3 +10,4 @@
 /data/content/*
 !/data/content/.gitkeep
 /dist
+/config/clip.yaml

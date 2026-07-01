@@ -1,5 +1,4 @@
 jtype: Flow
-version: '1'
 with:
   port: 51000
   protocol: http
@@ -8,7 +7,8 @@ executors:
   - name: clip_t
     uses:
       jtype: CLIPEncoder
+      with:
+        name: '__CLIP_MODEL_NAME__'
       metas:
         py_modules:
           - clip_server.executors.clip_torch
-
