@@ -56,8 +56,9 @@ All five services run on a single Docker Compose network, `multimodal_net`:
 - **`clip_server`** — a Jina `clip-server` container that loads the configured CLIP
   model and turns text and images into embeddings, on demand, for `fess01`.
 - **`content`** — a tiny `nginx:alpine` server exposing `./data/content` (read-only)
-  as `http://content/` on the internal network only, so Fess can web-crawl real
-  `http://` URLs (thumbnails render and the lightbox can load full-size originals).
+  as `http://content/` on the internal network only, so Fess's crawler and thumbnail
+  generator fetch real HTTP responses (thumbnails render properly) instead of hitting
+  the `file://` dead-end.
 - **`fess01`** — Fess `15.7.0-noble` with the `fess-webapp-multimodal` plugin
   (installed via `FESS_PLUGINS`, not a local jar) and the `mosaic` theme. Combines the
   `default` (BM25) and `multi_modal` (CLIP) searchers via hybrid rank fusion —
@@ -103,7 +104,7 @@ This host-side script (no Docker/Fess/OpenSearch calls) is safe to re-run and:
   can rewrite it later via Admin > General without conflicting with `git pull`);
 - syncs the `${THEME_NAME:-mosaic}` theme from the
   [`fess-themes`](https://github.com/codelibs/fess-themes) repo into
-  `./data/fess/usr/share/fess/app/themes/mosaic`;
+  `./data/fess/usr/share/fess/app/themes/<THEME_NAME>` (mosaic by default);
 - drops any stale multimodal plugin jar from a previous run (plugins are loaded via
   `FESS_PLUGINS`, never downloaded by this script).
 
@@ -326,10 +327,12 @@ pip install fiftyone
 fiftyone zoo datasets load open-images-v7 --split validation --kwargs max_samples=1000 -d ./data/fiftyone-export
 ```
 
-Then copy the exported images into `./data/content/images/` (or another subdirectory
-linked from `./data/content/index.html`) before running the crawl in
-[step 5](#5-crawl-manual-step), so Fess picks them up alongside — or instead of — the
-built-in sample set.
+Then copy the exported images into `./data/content/images/` and add links to them
+from `./data/content/index.html` before running the crawl in
+[step 5](#5-crawl-manual-step). The crawler discovers documents by following links
+from `http://content/`, so images in `./data/content/images/` alone (without links)
+will not be indexed — you must make them linkable from `index.html` or another
+crawlable page.
 
 ---
 
