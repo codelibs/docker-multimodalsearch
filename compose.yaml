@@ -59,10 +59,12 @@ services:
 #        reservations:
 #          devices:
 #            - capabilities: [gpu]
-    # No healthcheck: the jinaai/clip-server image ships neither curl nor wget, and
-    # its Flow gateway is not guaranteed to answer a plain HTTP GET with 200. CLIP is
-    # only needed at crawl/query time, not at Fess boot, so fess01 depends on this
-    # service with condition: service_started rather than service_healthy.
+    # Healthcheck via a Python socket probe: the jinaai/clip-server image ships neither
+    # curl nor wget, so a plain HTTP-GET probe is not available (and the Flow gateway is
+    # not guaranteed to answer a bare GET with 200). CLIP is only needed at crawl/query
+    # time, not at Fess boot, so fess01 depends on this service with condition:
+    # service_started (not service_healthy) — the probe is for `docker compose ps`
+    # visibility and to signal when the model is ready for the crawl step.
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import socket; socket.create_connection(('localhost',51000),2)\" || exit 1"]
       interval: 15s
