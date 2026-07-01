@@ -1,7 +1,12 @@
+/.env
 /data/https-portal/ssl_certs
-#/data/fess/opt/fess
+/data/opensearch/usr/share/opensearch/data
+/data/opensearch/usr/share/opensearch/config/dictionary
 /data/fess/var/lib/fess
 /data/fess/var/log/fess
 /data/fess/usr/share/fess/app/WEB-INF/plugin
-/data/opensearch/usr/share/opensearch/data
-/data/opensearch/usr/share/opensearch/config/dictionary
+/data/fess/usr/share/fess/app/themes
+/data/fess/opt/fess/system.properties
+/data/content/*
+!/data/content/.gitkeep
+/dist
