@@ -170,6 +170,7 @@ services:
         condition: service_healthy
     environment:
       - FESS_URL=http://fess01:8080
+      - SEARCH_ENGINE_HTTP_URL=http://search01:9200
       - FESS_ADMIN_PASSWORD=${FESS_ADMIN_PASSWORD:-admin}
       - MAX_WAIT=${MAX_WAIT:-900}
     volumes:
