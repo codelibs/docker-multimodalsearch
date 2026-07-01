@@ -88,11 +88,11 @@ IMAGES=(
   'animal|cat|CC0|Marko Milivojevic (via Pixnio)|https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Domestic_shorthair_cat_portrait_in_grass.jpg/960px-Domestic_shorthair_cat_portrait_in_grass.jpg|Domestic shorthair cat portrait in grass.jpg'
   'animal|dog|Public domain|Herwig Kavallar|https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Labrador_Retriever_portrait.jpg/960px-Labrador_Retriever_portrait.jpg|Labrador Retriever portrait.jpg'
   'animal|retriever|CC BY-SA 4.0|Morphdog|https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Golden_Retriever_medium-to-light-coat.jpg/960px-Golden_Retriever_medium-to-light-coat.jpg|Golden Retriever medium-to-light-coat.jpg'
-  'animal|horse|CC BY-SA 3.0|Francois Marchal; derivative: Dana boomer|https://upload.wikimedia.org/wikipedia/commons/d/de/Nokota_Horses_cropped.jpg|Nokota Horses cropped.jpg'
+  'animal|horse|CC BY-SA 3.0|Francois Marchal; derivative: Dana boomer|https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Nokota_Horses_cropped.jpg/960px-Nokota_Horses_cropped.jpg|Nokota Horses cropped.jpg'
   'animal|elephant|CC0|Candy Piercy|https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/African_Bull_elephant_walking_towards_camera_in_August_2013.jpg/960px-African_Bull_elephant_walking_towards_camera_in_August_2013.jpg|African Bull elephant walking towards camera in August 2013.jpg'
   'animal|tiger|CC BY-SA 4.0|Charles J. Sharp|https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Walking_tiger_female.jpg/960px-Walking_tiger_female.jpg|Walking tiger female.jpg'
   'animal|panda|Public domain|Jeff Kubina|https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Giant_Panda_2004-03-2.jpg/960px-Giant_Panda_2004-03-2.jpg|Giant Panda 2004-03-2.jpg'
-  'animal|penguin|CC BY-SA 3.0|Samuel Blanc|https://upload.wikimedia.org/wikipedia/commons/0/07/Emperor_Penguin_Manchot_empereur.jpg|Emperor Penguin Manchot empereur.jpg'
+  'animal|penguin|CC BY-SA 3.0|Samuel Blanc|https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Emperor_Penguin_Manchot_empereur.jpg/960px-Emperor_Penguin_Manchot_empereur.jpg|Emperor Penguin Manchot empereur.jpg'
   'animal|lion|CC BY 2.0|Kevin Pluck|https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/Lion_waiting_in_Namibia.jpg/960px-Lion_waiting_in_Namibia.jpg|Lion waiting in Namibia.jpg'
   'animal|fox|CC0|Joanne Redwood|https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Vulpes_vulpes_ssp_fulvus.jpg/960px-Vulpes_vulpes_ssp_fulvus.jpg|Vulpes vulpes ssp fulvus.jpg'
   'animal|owl|CC BY-SA 4.0|Rhododendrites|https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Eurasian_eagle-owl_%2844088%29.jpg/960px-Eurasian_eagle-owl_%2844088%29.jpg|Eurasian eagle-owl (44088).jpg'
@@ -116,7 +116,7 @@ IMAGES=(
   'nature|forest|CC0|W.carter|https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/Spruce_forest_at_Holma.jpg/960px-Spruce_forest_at_Holma.jpg|Spruce forest at Holma.jpg'
   'nature|beach|CC BY-SA 4.0|Michal Klajban|https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Mystic_Beach%2C_Vancouver_Island%2C_Canada_10.jpg/960px-Mystic_Beach%2C_Vancouver_Island%2C_Canada_10.jpg|Mystic Beach, Vancouver Island, Canada 10.jpg'
   'nature|desert|Public domain|Bureau of Land Management - Utah/Bob Wick|https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Utah_Dunes_Landscape_-_West_Desert_District.jpg/960px-Utah_Dunes_Landscape_-_West_Desert_District.jpg|Utah Dunes Landscape - West Desert District.jpg'
-  'building|eiffeltower|Public domain|Benh LIEU SONG|https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Tour_Eiffel_Wikimedia_Commons.jpg/960px-Tour_Eiffel_Wikimedia_Commons.jpg|Tour Eiffel Wikimedia Commons.jpg'
+  'building|eiffeltower|CC BY-SA 3.0|Benh LIEU SONG|https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Tour_Eiffel_Wikimedia_Commons.jpg/960px-Tour_Eiffel_Wikimedia_Commons.jpg|Tour Eiffel Wikimedia Commons.jpg'
   'building|colosseum|CC BY-SA 4.0|FeaturedPics|https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Colosseo_2020.jpg/960px-Colosseo_2020.jpg|Colosseo 2020.jpg'
   'building|bigben|CC BY 2.5|Diliff|https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Clock_Tower_-_Palace_of_Westminster%2C_London_-_May_2007.jpg/960px-Clock_Tower_-_Palace_of_Westminster%2C_London_-_May_2007.jpg|Clock Tower - Palace of Westminster, London - May 2007.jpg'
   'building|operahouse|CC BY-SA 3.0|Diliff|https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Sydney_Opera_House_-_Dec_2008.jpg/960px-Sydney_Opera_House_-_Dec_2008.jpg|Sydney Opera House - Dec 2008.jpg'
@@ -128,7 +128,9 @@ log "Fetching ${#IMAGES[@]} sample images into ${IMAGES_DIR} ..."
 downloaded=0
 skipped=0
 failed=0
+idx=0
 for entry in "${IMAGES[@]}"; do
+  idx=$((idx + 1))
   IFS='|' read -r category slug license artist url title <<< "${entry}"
   dest="${IMAGES_DIR}/${slug}.jpg"
 
@@ -137,25 +139,30 @@ for entry in "${IMAGES[@]}"; do
     continue
   fi
 
+  # Sleep between requests to avoid hammering the server, but not after the
+  # last entry (nothing left to download).
+  more_remaining=0
+  [ "${idx}" -lt "${#IMAGES[@]}" ] && more_remaining=1
+
   tmp="$(mktemp "${dest}.XXXXXX")"
   if ! download "${url}" "${tmp}"; then
     warn "download failed, skipping: ${slug} (${url})"
     rm -f "${tmp}"
     failed=$((failed + 1))
-    sleep 0.3
+    [ "${more_remaining}" -eq 1 ] && sleep 0.3
     continue
   fi
   if ! is_image_file "${tmp}"; then
     warn "downloaded file is not a recognizable image, skipping: ${slug} (${url})"
     rm -f "${tmp}"
     failed=$((failed + 1))
-    sleep 0.3
+    [ "${more_remaining}" -eq 1 ] && sleep 0.3
     continue
   fi
   mv "${tmp}" "${dest}"
   downloaded=$((downloaded + 1))
   log "downloaded ${slug}.jpg"
-  sleep 0.3
+  [ "${more_remaining}" -eq 1 ] && sleep 0.3
 done
 log "Images: ${downloaded} downloaded, ${skipped} already present, ${failed} failed."
 
@@ -257,7 +264,7 @@ category_list_html() {
   for entry in "${IMAGES[@]}"; do
     IFS='|' read -r c slug _ _ _ title <<< "${entry}"
     if [ "${c}" = "${category}" ] && [ -s "${IMAGES_DIR}/${slug}.jpg" ]; then
-      printf '    <li><a href="../images/%s.jpg">%s</a></li>\n' "${slug}" "${title%.jpg}"
+      printf '    <li><a href="../images/%s.jpg">%s</a></li>\n' "${slug}" "${title%.[jJ][pP][gG]}"
     fi
   done
 }
@@ -392,7 +399,7 @@ EOF
   for entry in "${IMAGES[@]}"; do
     IFS='|' read -r _ slug _ _ _ title <<< "${entry}"
     if [ -s "${IMAGES_DIR}/${slug}.jpg" ]; then
-      printf '<li><a href="images/%s.jpg">%s</a></li>\n' "${slug}" "${title%.jpg}"
+      printf '<li><a href="images/%s.jpg">%s</a></li>\n' "${slug}" "${title%.[jJ][pP][gG]}"
     fi
   done
   printf '</ul>\n</body>\n</html>\n'
@@ -414,9 +421,13 @@ Images
 All photos are sourced from Wikimedia Commons (https://commons.wikimedia.org)
 by their stable https://upload.wikimedia.org/... file URL, under CC0,
 CC-BY, CC-BY-SA, or Public Domain terms as noted below (GFDL-only files were
-deliberately avoided to keep redistribution simple). Attribution is provided
-here for completeness even where the license does not strictly require it
-(e.g. CC0/Public Domain).
+deliberately avoided to keep redistribution simple). Several images below are
+licensed CC BY or CC BY-SA, which legally REQUIRE attribution on
+redistribution; CC BY-SA (share-alike) images additionally require that any
+redistributed modified version carry the same license. The per-file table
+below satisfies the attribution requirement for those images. CC0/Public
+Domain entries carry no such legal obligation; they are listed here only for
+sourcing transparency.
 
   file          license          author/source                                 Wikimedia Commons title
   ------------  ---------------  ---------------------------------------------  ------------------------------------------------
