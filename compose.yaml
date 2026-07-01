@@ -35,6 +35,11 @@ services:
       # Inter-container traffic uses the docker network (search01:9200); this publish
       # is only for host-local debugging. Do not expose 9200 on a public interface.
       - "127.0.0.1:9200:9200"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - multimodal_net
 
@@ -58,6 +63,17 @@ services:
     # its Flow gateway is not guaranteed to answer a plain HTTP GET with 200. CLIP is
     # only needed at crawl/query time, not at Fess boot, so fess01 depends on this
     # service with condition: service_started rather than service_healthy.
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; socket.create_connection(('localhost',51000),2)\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 180s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - multimodal_net
 
@@ -73,6 +89,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - multimodal_net
 
@@ -91,7 +112,7 @@ services:
         condition: service_healthy
     environment:
       SEARCH_ENGINE_HTTP_URL: "http://search01:9200"
-      FESS_DICTIONARY_PATH: "/usr/share/fess/dict"
+      FESS_DICTIONARY_PATH: "/usr/share/opensearch/config/dictionary"
       FESS_PLUGINS: "${FESS_PLUGINS:-fess-webapp-multimodal:15.7.0}"
       # fess_config.properties overrides (-Dfess.config.*), the multimodal
       # fess.multimodal.* properties (read by fess-webapp-multimodal), and the CLIP
@@ -127,6 +148,11 @@ services:
       - ./data/fess/var/log/fess:/var/log/fess
       - ./data/fess/usr/share/fess/app/WEB-INF/plugin:/usr/share/fess/app/WEB-INF/plugin
       - ./data/fess/usr/share/fess/app/themes/${THEME_NAME:-mosaic}:/usr/share/fess/app/themes/${THEME_NAME:-mosaic}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - multimodal_net
 
