@@ -77,6 +77,19 @@ done
 #    destroys already-crawled data by reindexing needlessly).
 if doc_has_vector; then
   log "Document index already has '${VECTOR_FIELD}'; nothing to do."
+
+  # 3a. Warn if the live vector dimension no longer matches the configured
+  #     MULTIMODAL_DIMENSION; a Fess reindex only copies documents and does NOT
+  #     recompute embeddings, so a dimension change requires a full re-crawl.
+  expected_dim="${MULTIMODAL_DIMENSION:-512}"
+  current_dim="$(curl -s "${SEARCH_ENGINE_HTTP_URL}/${DOC_ALIAS}/_mapping" \
+    | jq -r 'first(.[].mappings.properties.content_vector.dimension) // empty')"
+  if [ -n "${current_dim}" ] && [ "${current_dim}" != "${expected_dim}" ]; then
+    log "WARN: content_vector dimension mismatch: index=${current_dim} expected=${expected_dim}."
+    log "WARN: The model/dimension changed. Recreate the index and re-crawl (re-embed);"
+    log "WARN: a Fess reindex only copies documents and does NOT recompute embeddings."
+  fi
+
   exit 0
 fi
 
