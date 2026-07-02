@@ -13,6 +13,15 @@ Drop-in replacement for jinaai/clip-server. Emulates `POST /post`:
 First boot downloads the model (~1.6 GB) into `HF_HOME` (bind-mounted to
 `./data/clip_server/cache`); it requires network access at runtime, not build time.
 
+## Runtime security
+- Runs as a non-root user (`clip`, default uid/gid `1000`). The image never runs
+  as root, because it decodes untrusted crawled image bytes with Pillow.
+- The bind-mounted model cache (`./data/clip_server/cache`) must be writable by
+  that uid. Set `CLIP_UID`/`CLIP_GID` in the environment (compose) to match the
+  host user that owns the cache directory if the defaults do not.
+- Pinned `pillow>=10.3.0` and `transformers>=4.48.0` to pick up decoder and
+  deserialization CVE fixes.
+
 ## Test
     pip install -r requirements-dev.txt
     python -m pytest tests -v                    # unit (fast)

@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
+# UID/GID for the non-root runtime user. Override at build time (and match the
+# runtime `user:` in compose) so the bind-mounted model cache stays writable.
+ARG APP_UID=1000
+ARG APP_GID=1000
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/cache/huggingface \
@@ -8,6 +13,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MULTIMODAL_DIMENSION=512 \
     CLIP_DEVICE=cpu \
     CLIP_SERVER_PORT=51000
+
+# Run as a dedicated non-root user: this service decodes untrusted crawled image
+# bytes with Pillow, so a decoder memory-safety bug must not execute as root.
+RUN groupadd --gid "${APP_GID}" clip \
+    && useradd --uid "${APP_UID}" --gid "${APP_GID}" --no-log-init --create-home --shell /usr/sbin/nologin clip
 
 WORKDIR /app
 
@@ -29,6 +39,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 
+# HF_HOME cache mount point owned by the runtime user so the first-boot model
+# download can write to the bind-mounted ./data/clip_server/cache.
+RUN mkdir -p /cache/huggingface \
+    && chown -R clip:clip /app /cache
+
 EXPOSE 51000
+
+USER clip
 
 CMD ["uvicorn", "app.server:create_production_app", "--factory", "--host", "0.0.0.0", "--port", "51000"]

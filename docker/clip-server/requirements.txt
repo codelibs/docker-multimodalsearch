@@ -1,8 +1,8 @@
 open_clip_torch==2.24.0
-transformers==4.38.2
+transformers==4.48.0
 sentencepiece==0.2.0
 protobuf==4.25.3
-pillow==10.2.0
+pillow==10.4.0
 fastapi==0.110.0
 uvicorn[standard]==0.29.0
 numpy==1.26.4
