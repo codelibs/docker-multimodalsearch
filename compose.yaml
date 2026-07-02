@@ -57,6 +57,7 @@ services:
       CLIP_MODEL_NAME: ${CLIP_MODEL_NAME:-xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k}
       MULTIMODAL_DIMENSION: ${MULTIMODAL_DIMENSION:-512}
       CLIP_DEVICE: ${CLIP_DEVICE:-cpu}
+      CLIP_MAX_IMAGE_PIXELS: ${CLIP_MAX_IMAGE_PIXELS:-64000000}
       HF_HOME: /cache/huggingface
     volumes:
       - ./data/clip_server/cache:/cache

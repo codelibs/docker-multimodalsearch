@@ -80,6 +80,23 @@ def test_decode_image_rejects_oversized_image(monkeypatch):
         OpenClipEncoder._decode_image(buf.getvalue())
 
 
+def test_decode_image_rejects_near_limit_image(monkeypatch):
+    # Pixels between 1x and 2x MAX_IMAGE_PIXELS only raise Pillow's
+    # DecompressionBombWarning (not the hard error); encoder.py promotes that
+    # warning to an error, which _decode_image maps to ImageDecodeError.
+    import warnings
+
+    from app.errors import ImageDecodeError
+
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 64), (0, 0, 0)).save(buf, format="PNG")  # 4096 pixels
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 3000)  # 3000 < 4096 <= 6000
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        with pytest.raises(ImageDecodeError):
+            OpenClipEncoder._decode_image(buf.getvalue())
+
+
 def test_decode_image_accepts_valid_png():
     buf = io.BytesIO()
     Image.new("RGB", (8, 8), (1, 2, 3)).save(buf, format="PNG")

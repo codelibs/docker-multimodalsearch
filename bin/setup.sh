@@ -25,7 +25,7 @@ fi
 env_get() {
   [ -f .env ] || return 0
   sed -n "s/^$1=//p" .env | tail -n1 \
-    | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/" -e 's/[[:space:]]*$//'
+    | sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
 }
 THEME_NAME="${THEME_NAME:-$(env_get THEME_NAME)}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-$(env_get FESS_THEMES_REPO)}"
