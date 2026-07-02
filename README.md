@@ -53,8 +53,9 @@ All five services run on a single Docker Compose network, `multimodal_net`:
 - **`search01`** — OpenSearch 3.7 (`ghcr.io/codelibs/fess-opensearch:3.7.0`), roles
   `cluster_manager,data,ingest,ml`. Stores documents and their CLIP vectors and serves
   both the BM25 and kNN branches of every query.
-- **`clip_server`** — a Jina `clip-server` container that loads the configured CLIP
-  model and turns text and images into embeddings, on demand, for `fess01`.
+- **`clip_server`** — built from `docker/clip-server/Dockerfile` (stock jinaai/clip-server
+  image with pinned `transformers` for multilingual model support). Loads the configured
+  CLIP model and turns text and images into embeddings, on demand, for `fess01`.
 - **`content`** — a tiny `nginx:alpine` server exposing `./data/content` (read-only)
   as `http://content/` on the internal network only, so Fess's crawler and thumbnail
   generator fetch real HTTP responses (thumbnails render properly) instead of hitting
@@ -144,6 +145,9 @@ docker compose logs -f clip_server fess01 init-fess-index
 
 Notes on first boot:
 
+- `docker compose up -d` builds the `clip_server` image locally (adds ~a minute) before
+  pulling other images. The image is built once and cached; subsequent starts pull it
+  from Docker's local cache and are faster.
 - `clip_server` downloads the configured CLIP model (**~1.6 GB** for the default
   model) the first time it starts, caching it in `./data/clip_server/cache`; this can
   take a few minutes. `fess01` only depends on `clip_server` having *started* (not
@@ -252,6 +256,15 @@ mapping. To swap models:
 
 You can also tune `CLIP_MIN_SCORE` (default `0.5`) in `.env`, which sets the minimum
 similarity score a CLIP match must reach to be returned.
+
+Three additional optional `.env` variables control the clip-server build and image:
+- `CLIP_SERVER_BASE` (default `jinaai/clip-server`): base image to build from.
+- `TRANSFORMERS_VERSION` (default `4.30.0`): pinned transformers library version (must
+  be compatible with the base image's Python version; multilingual models require
+  transformers at load time). English-only CLIP models (e.g. `ViT-B-32::openai`) do not
+  need transformers, but the local image includes it harmlessly.
+- `CLIP_SERVER_IMAGE` (default `multimodal-clip-server:latest`): name and tag of the
+  locally-built image. All three have working defaults and rarely need to be changed.
 
 ## Theme
 
