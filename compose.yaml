@@ -44,7 +44,14 @@ services:
       - multimodal_net
 
   clip_server:
-    image: jinaai/clip-server
+    # Built from ./docker/clip-server (stock jinaai/clip-server + transformers), which
+    # the multilingual open_clip text towers require at model-load time.
+    build:
+      context: ./docker/clip-server
+      args:
+        CLIP_SERVER_BASE: ${CLIP_SERVER_BASE:-jinaai/clip-server}
+        TRANSFORMERS_VERSION: ${TRANSFORMERS_VERSION:-4.30.2}
+    image: ${CLIP_SERVER_IMAGE:-docker-multimodalsearch/clip-server:local}
     container_name: clip_server
     platform: linux/amd64
     restart: always
