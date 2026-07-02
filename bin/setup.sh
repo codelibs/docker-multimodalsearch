@@ -37,6 +37,19 @@ THEME_NAME="${THEME_NAME:-mosaic}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-https://github.com/codelibs/fess-themes.git}"
 FESS_THEMES_REF="${FESS_THEMES_REF:-main}"
 
+# clip_server runs as a non-root user (docker/clip-server/Dockerfile creates the
+# "clip" user; compose runs it as `user: "${CLIP_UID:-1000}:${CLIP_GID:-1000}"`).
+# Pin that UID/GID to the host user so the bind-mounted model cache
+# (./data/clip_server/cache) stays writable when the container downloads the
+# model on first boot. docker compose reads .env declaratively and cannot run
+# `id`, so persist the resolved values into .env when they are absent.
+CLIP_UID="${CLIP_UID:-$(env_get CLIP_UID)}"
+CLIP_GID="${CLIP_GID:-$(env_get CLIP_GID)}"
+CLIP_UID="${CLIP_UID:-$(id -u)}"
+CLIP_GID="${CLIP_GID:-$(id -g)}"
+grep -q '^CLIP_UID=' .env 2>/dev/null || printf 'CLIP_UID=%s\n' "${CLIP_UID}" >> .env
+grep -q '^CLIP_GID=' .env 2>/dev/null || printf 'CLIP_GID=%s\n' "${CLIP_GID}" >> .env
+
 THEME_DEST="./data/fess/usr/share/fess/app/themes/${THEME_NAME}"
 
 # A previous run may have chowned ./data to the container UIDs (1001/1000). Reclaim
@@ -123,7 +136,7 @@ if [ "$(uname -s)" = "Linux" ]; then
   sudo chown -R 1001 ./data/fess/usr/share/fess/app/themes
   sudo chown -R 1000 ./data/opensearch/usr/share/opensearch/data
   sudo chown -R 1000 ./data/opensearch/usr/share/opensearch/config/dictionary
-  sudo chown -R 1000 ./data/clip_server/cache
+  sudo chown -R "${CLIP_UID}:${CLIP_GID}" ./data/clip_server/cache
 fi
 
 echo "Setup complete. Next: docker compose up -d"

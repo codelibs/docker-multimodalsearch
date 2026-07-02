@@ -58,7 +58,9 @@ All five services run on a single Docker Compose network, `multimodal_net`:
   (Jina-compatible), returning L2-normalized text/image embeddings on demand for
   `fess01`. The `fess-webapp-multimodal` plugin talks to it unchanged at
   `http://clip_server:51000`. The model is MIT-licensed. First boot downloads ~1.6 GB
-  into `./data/clip_server/cache` and requires network access at runtime.
+  into `./data/clip_server/cache` and requires network access at runtime. It runs as a
+  non-root user whose UID/GID default to `1000` and are set to the host user by
+  `bin/setup.sh` (overridable via `CLIP_UID`/`CLIP_GID` in `.env`).
 - **`content`** — a tiny `nginx:alpine` server exposing `./data/content` (read-only)
   as `http://content/` on the internal network only, so Fess's crawler and thumbnail
   generator fetch real HTTP responses (thumbnails render properly) instead of hitting
@@ -108,7 +110,9 @@ This host-side script (no Docker/Fess/OpenSearch calls) is safe to re-run and:
   [`fess-themes`](https://github.com/codelibs/fess-themes) repo into
   `./data/fess/usr/share/fess/app/themes/<THEME_NAME>` (mosaic by default);
 - drops any stale multimodal plugin jar from a previous run (plugins are loaded via
-  `FESS_PLUGINS`, never downloaded by this script).
+  `FESS_PLUGINS`, never downloaded by this script);
+- writes `CLIP_UID`/`CLIP_GID` (your host user's UID/GID) into `.env` if absent, so the
+  non-root `clip_server` container can write its bind-mounted model cache.
 
 **About the theme sync — read if `mosaic` is not yet on the `fess-themes` `main`
 branch:** `bin/setup.sh` resolves the theme source in this order:
