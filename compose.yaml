@@ -44,47 +44,35 @@ services:
       - multimodal_net
 
   clip_server:
-    # Built from ./docker/clip-server (stock jinaai/clip-server + transformers), which
-    # the multilingual open_clip text towers require at model-load time.
     build:
       context: ./docker/clip-server
-      args:
-        CLIP_SERVER_BASE: ${CLIP_SERVER_BASE:-jinaai/clip-server}
-        TRANSFORMERS_VERSION: ${TRANSFORMERS_VERSION:-4.30.2}
     image: ${CLIP_SERVER_IMAGE:-docker-multimodalsearch/clip-server:local}
     container_name: clip_server
-    platform: linux/amd64
     restart: always
-    command: ["/home/cas/clip_config.yaml"]
     environment:
-      - JINA_HIDE_SURVEY=1
+      CLIP_MODEL_NAME: ${CLIP_MODEL_NAME:-xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k}
+      MULTIMODAL_DIMENSION: ${MULTIMODAL_DIMENSION:-512}
+      CLIP_DEVICE: ${CLIP_DEVICE:-cpu}
+      HF_HOME: /cache/huggingface
     volumes:
-      - ./config/clip.yaml:/home/cas/clip_config.yaml
-      - ./data/clip_server/cache:/home/cas/.cache
-#    deploy:
-#      resources:
-#        reservations:
-#          devices:
-#            - capabilities: [gpu]
-    # Healthcheck via a Python socket probe: the jinaai/clip-server image ships neither
-    # curl nor wget, so a plain HTTP-GET probe is not available (and the Flow gateway is
-    # not guaranteed to answer a bare GET with 200). CLIP is only needed at crawl/query
-    # time, not at Fess boot, so fess01 depends on this service with condition:
-    # service_started (not service_healthy) — the probe is for `docker compose ps`
-    # visibility and to signal when the model is ready for the crawl step.
+      - ./data/clip_server/cache:/cache
+    networks:
+      - multimodal_net
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import socket; socket.create_connection(('localhost',51000),2)\" || exit 1"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51000/health').status==200 else 1)"
       interval: 15s
-      timeout: 5s
-      retries: 20
-      start_period: 180s
+      timeout: 10s
+      retries: 40
+      start_period: 600s
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-    networks:
-      - multimodal_net
 
   content:
     image: ${NGINX_IMAGE:-nginx:alpine}
@@ -116,7 +104,7 @@ services:
       search01:
         condition: service_healthy
       clip_server:
-        condition: service_started
+        condition: service_healthy
       content:
         condition: service_healthy
     environment:
@@ -184,6 +172,7 @@ services:
       - SEARCH_ENGINE_HTTP_URL=http://search01:9200
       - FESS_ADMIN_PASSWORD=${FESS_ADMIN_PASSWORD:-admin}
       - MAX_WAIT=${MAX_WAIT:-900}
+      - MULTIMODAL_DIMENSION=${MULTIMODAL_DIMENSION:-512}
     volumes:
       - ./bin/init-fess-index.sh:/init-fess-index.sh:ro
     entrypoint: ["sh", "/init-fess-index.sh"]

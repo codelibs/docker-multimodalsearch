@@ -7,7 +7,6 @@ cd "$(dirname "$0")/.."
 # Host-side setup for docker-multimodalsearch:
 #   - load configuration from .env (bootstrapped from .env.example on first run)
 #   - create the bind-mount data directories
-#   - render the live clip.yaml (CLIP model name) from its tracked template
 #   - seed the live system.properties from the tracked template (first run only)
 #   - sync the static UI theme from fess-themes
 #   - drop any stale multimodal plugin jar (plugins now come via FESS_PLUGINS,
@@ -31,20 +30,18 @@ THEME_NAME="${THEME_NAME:-$(env_get THEME_NAME)}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-$(env_get FESS_THEMES_REPO)}"
 FESS_THEMES_REF="${FESS_THEMES_REF:-$(env_get FESS_THEMES_REF)}"
 FESS_THEMES_DIR="${FESS_THEMES_DIR:-$(env_get FESS_THEMES_DIR)}"
-CLIP_MODEL_NAME="${CLIP_MODEL_NAME:-$(env_get CLIP_MODEL_NAME)}"
 
 # Defaults mirror .env.example; used if a key is missing from both the
 # environment and .env.
 THEME_NAME="${THEME_NAME:-mosaic}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-https://github.com/codelibs/fess-themes.git}"
 FESS_THEMES_REF="${FESS_THEMES_REF:-main}"
-CLIP_MODEL_NAME="${CLIP_MODEL_NAME:-xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k}"
 
 THEME_DEST="./data/fess/usr/share/fess/app/themes/${THEME_NAME}"
 
 # A previous run may have chowned ./data to the container UIDs (1001/1000). Reclaim
 # it for the host user so this re-run can modify/replace files (theme sync,
-# plugin cleanup, clip.yaml re-render).
+# plugin cleanup).
 if [ "$(uname -s)" = "Linux" ] && [ -d ./data ]; then
   sudo chown -R "$(id -u)" ./data
 fi
@@ -61,9 +58,6 @@ mkdir -p ./data/content
 touch ./data/content/.gitkeep
 mkdir -p ./data/clip_server/cache
 mkdir -p ./data/https-portal/ssl_certs
-
-echo "Rendering config/clip.yaml (model=${CLIP_MODEL_NAME})..."
-sed "s#__CLIP_MODEL_NAME__#${CLIP_MODEL_NAME}#" config/clip.yaml.template > config/clip.yaml
 
 # Seed the live system.properties from the tracked template on first run only.
 # The live file is git-ignored so Fess can rewrite it (Admin > General) without
