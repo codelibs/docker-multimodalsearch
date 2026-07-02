@@ -46,6 +46,11 @@ RUN mkdir -p /cache/huggingface \
 
 EXPOSE 51000
 
+# Point HOME at the writable cache bind mount so any ~/.cache fallback (e.g.
+# open_clip URL-hosted weights) works even when compose runs the container as a
+# non-1000 UID that has no /etc/passwd home.
+ENV HOME=/cache
+
 USER clip
 
 CMD ["uvicorn", "app.server:create_production_app", "--factory", "--host", "0.0.0.0", "--port", "51000"]

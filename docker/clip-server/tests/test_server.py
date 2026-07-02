@@ -69,6 +69,21 @@ def test_post_invalid_base64_is_400():
     assert resp.status_code == 400
 
 
+def test_post_undecodable_blob_is_400():
+    # Valid base64, but the bytes are not a decodable image: the encoder raises
+    # ImageDecodeError and the server must surface a 400 (not a 500).
+    from app.errors import ImageDecodeError
+
+    class RaisingEncoder(FakeEncoder):
+        def encode_images(self, images):
+            raise ImageDecodeError("cannot decode image bytes")
+
+    client = TestClient(create_app(RaisingEncoder()))
+    blob = base64.b64encode(b"valid base64 but not an image").decode()
+    resp = client.post("/post", json={"data": [{"blob": blob}]})
+    assert resp.status_code == 400
+
+
 def test_health_reports_ok_and_info():
     client = TestClient(create_app(FakeEncoder()))
     resp = client.get("/health")

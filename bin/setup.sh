@@ -24,7 +24,8 @@ fi
 # spaces/special chars in unrelated keys like FESS_ADMIN_PASSWORD).
 env_get() {
   [ -f .env ] || return 0
-  sed -n "s/^$1=//p" .env | tail -n1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+  sed -n "s/^$1=//p" .env | tail -n1 \
+    | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/" -e 's/[[:space:]]*$//'
 }
 THEME_NAME="${THEME_NAME:-$(env_get THEME_NAME)}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-$(env_get FESS_THEMES_REPO)}"
@@ -45,10 +46,13 @@ FESS_THEMES_REF="${FESS_THEMES_REF:-main}"
 # `id`, so persist the resolved values into .env when they are absent.
 CLIP_UID="${CLIP_UID:-$(env_get CLIP_UID)}"
 CLIP_GID="${CLIP_GID:-$(env_get CLIP_GID)}"
-CLIP_UID="${CLIP_UID:-$(id -u)}"
-CLIP_GID="${CLIP_GID:-$(id -g)}"
-grep -q '^CLIP_UID=' .env 2>/dev/null || printf 'CLIP_UID=%s\n' "${CLIP_UID}" >> .env
-grep -q '^CLIP_GID=' .env 2>/dev/null || printf 'CLIP_GID=%s\n' "${CLIP_GID}" >> .env
+# Fall back to the host user for empty or non-numeric values so an unset key, a
+# blank `CLIP_UID=`, or a CRLF/whitespace-polluted .env can never yield an
+# invalid compose `user:` spec or diverge from the chown below.
+case "${CLIP_UID}" in "" | *[!0-9]*) CLIP_UID="$(id -u)" ;; esac
+case "${CLIP_GID}" in "" | *[!0-9]*) CLIP_GID="$(id -g)" ;; esac
+grep -qE '^CLIP_UID=[0-9]' .env 2>/dev/null || printf 'CLIP_UID=%s\n' "${CLIP_UID}" >> .env
+grep -qE '^CLIP_GID=[0-9]' .env 2>/dev/null || printf 'CLIP_GID=%s\n' "${CLIP_GID}" >> .env
 
 THEME_DEST="./data/fess/usr/share/fess/app/themes/${THEME_NAME}"
 

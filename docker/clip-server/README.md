@@ -9,6 +9,8 @@ Drop-in replacement for jinaai/clip-server. Emulates `POST /post`:
 - `CLIP_MODEL_NAME` (default `xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k`)
 - `MULTIMODAL_DIMENSION` (default `512`; must match the model's output dim)
 - `CLIP_DEVICE` (`cpu` | `cuda` | `auto`)
+- `CLIP_MAX_IMAGE_PIXELS` (default `64000000`; Pillow decode cap for untrusted
+  images — oversized / decompression-bomb inputs are rejected with HTTP 400)
 
 First boot downloads the model (~1.6 GB) into `HF_HOME` (bind-mounted to
 `./data/clip_server/cache`); it requires network access at runtime, not build time.
@@ -19,8 +21,13 @@ First boot downloads the model (~1.6 GB) into `HF_HOME` (bind-mounted to
 - The bind-mounted model cache (`./data/clip_server/cache`) must be writable by
   that uid. Set `CLIP_UID`/`CLIP_GID` in the environment (compose) to match the
   host user that owns the cache directory if the defaults do not.
-- Pinned `pillow>=10.3.0` and `transformers>=4.48.0` to pick up decoder and
+- Pinned `pillow>=12.2.0` and `transformers>=4.48.0` to pick up image-decoder and
   deserialization CVE fixes.
+- Untrusted image bytes are decoded defensively: malformed/truncated or oversized
+  (decompression-bomb) blobs raise a decode error that `POST /post` returns as an
+  HTTP 400 instead of a 500, bounded by `CLIP_MAX_IMAGE_PIXELS`.
+- `HOME` points at the writable cache mount so `~/.cache` fallbacks work even when
+  the container runs as a non-1000 UID with no `/etc/passwd` home.
 
 ## Test
     pip install -r requirements-dev.txt
