@@ -210,7 +210,7 @@ def test_post_text_returns_embedding_envelope():
     assert resp.headers["content-type"].startswith("application/json")
     body = resp.json()
     assert list(body.keys()) == ["data"]
-    assert body["data"][0]["embedding"] == [11.0, 0.1, 0.2]  # len("running dogs") == 11
+    assert body["data"][0]["embedding"] == [12.0, 0.1, 0.2]  # len("running dogs") == 12
 
 
 def test_post_blob_decodes_image_and_returns_embedding():
