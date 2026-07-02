@@ -16,3 +16,6 @@
 /docker/clip-server/.venv/
 /docker/clip-server/**/__pycache__/
 *.pyc
+
+# Internal planning docs (specs/plans from brainstorming/writing-plans skills)
+/docs/superpowers/
