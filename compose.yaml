@@ -1,44 +1,16 @@
 services:
-  fess01:
-    container_name: fess01
-    image: ghcr.io/codelibs/fess:15.4.0
-    ports:
-      - "8080:8080"
-    depends_on:
-      - search01
-      - clip_server
-    environment:
-      - "ES_HTTP_URL=http://search01:9200"
-      - "FESS_DICTIONARY_PATH=/usr/share/opensearch/config/dictionary/"
-      - "FESS_JAVA_OPTS=-Dfess.config.crawler.document.cache.enabled=false -Dfess.config.adaptive.load.control=0 -Dfess.config.query.additional.response.fields=searcher -Dfess.config.job.system.property.filter.pattern=fess.multimodal.*|clip.* -Dfess.config.index.user.initial_password=admin -Dfess.multimodal.content.field=content_vector -Dfess.multimodal.content.dimension=512 -Dfess.multimodal.content.method=hnsw -Dfess.multimodal.content.engine=lucene -Dfess.multimodal.content.space_type=cosinesimil -Dfess.multimodal.min_score=0.5 -Dclip.server.endpoint=http://clip_server:51000"
-#      - "FESS_LOG_LEVEL=debug"
-    networks:
-      - multimodal_net
-    volumes:
-      - ./data/fess/opt/fess:/opt/fess
-      - ./data/fess/var/lib/fess:/var/lib/fess
-      - ./data/fess/var/log/fess:/var/log/fess
-      - ./data/fess/usr/share/fess/app/WEB-INF/plugin:/usr/share/fess/app/WEB-INF/plugin
-      - ./data/fess/usr/share/fess/app/WEB-INF/view/multimodal:/usr/share/fess/app/WEB-INF/view/multimodal
-#      - ./data/fiftyone:/home/fiftyone
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "5"
-    restart: unless-stopped
-
   search01:
+    image: ${OPENSEARCH_IMAGE:-ghcr.io/codelibs/fess-opensearch:3.7.0}
     container_name: search01
-    image: ghcr.io/codelibs/fess-opensearch:2.15.0
+    restart: always
     environment:
       - node.name=search01
       - discovery.seed_hosts=search01
       - cluster.initial_cluster_manager_nodes=search01
-      - cluster.name=fess-es
+      - cluster.name=fess-search
       - bootstrap.memory_lock=true
       - node.roles=cluster_manager,data,ingest,ml
-      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "OPENSEARCH_JAVA_OPTS=-Xms${OPENSEARCH_HEAP:-1g} -Xmx${OPENSEARCH_HEAP:-1g}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
       - "FESS_DICTIONARY_PATH=/usr/share/opensearch/config/dictionary"
@@ -47,44 +19,168 @@ services:
         soft: -1
         hard: -1
       nofile:
-        soft: 65535
-        hard: 65535
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
     volumes:
       - ./data/opensearch/usr/share/opensearch/data:/usr/share/opensearch/data
       - ./data/opensearch/usr/share/opensearch/config/dictionary:/usr/share/opensearch/config/dictionary
     ports:
-      - 9200:9200
-    networks:
-      - multimodal_net
+      # Bind to host loopback only: OpenSearch here runs with security disabled.
+      # Inter-container traffic uses the docker network (search01:9200); this publish
+      # is only for host-local debugging. Do not expose 9200 on a public interface.
+      - "127.0.0.1:9200:9200"
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
-        max-file: "5"
-    restart: unless-stopped
+        max-file: "3"
+    networks:
+      - multimodal_net
 
   clip_server:
+    build:
+      context: ./docker/clip-server
+    image: ${CLIP_SERVER_IMAGE:-docker-multimodalsearch/clip-server:local}
     container_name: clip_server
-    image: jinaai/clip-server
-    platform: linux/amd64
-    ports:
-      - "51000:51000"
-    volumes:
-      - ./data/clip_server/cache:/home/cas/.cache
-      - ./config/clip.yaml:/home/cas/clip_config.yaml
+    restart: always
     environment:
-      - JINA_HIDE_SURVEY=1
-      - JINA_LOG_LEVEL=DEBUG
-#    deploy:
-#      resources:
-#        reservations:
-#          devices:
-#            - capabilities: [gpu]
-    command: ["/home/cas/clip_config.yaml"]
+      CLIP_MODEL_NAME: ${CLIP_MODEL_NAME:-xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k}
+      MULTIMODAL_DIMENSION: ${MULTIMODAL_DIMENSION:-512}
+      CLIP_DEVICE: ${CLIP_DEVICE:-cpu}
+      HF_HOME: /cache/huggingface
+    volumes:
+      - ./data/clip_server/cache:/cache
+    networks:
+      - multimodal_net
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:51000/health').status==200 else 1)"
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 600s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  content:
+    image: ${NGINX_IMAGE:-nginx:alpine}
+    container_name: content
+    restart: always
+    volumes:
+      - ./data/content:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - multimodal_net
+
+  fess01:
+    image: ${FESS_IMAGE:-ghcr.io/codelibs/fess:15.7.0-noble}
+    container_name: fess01
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      search01:
+        condition: service_healthy
+      clip_server:
+        condition: service_healthy
+      content:
+        condition: service_healthy
+    environment:
+      SEARCH_ENGINE_HTTP_URL: "http://search01:9200"
+      # Trailing slash is REQUIRED: Fess builds analyzer keywords_path values by
+      # concatenating this prefix with e.g. "ar/protwords.txt"; without the slash it
+      # resolves to ".../dictionaryar/protwords.txt" and OpenSearch analyzer creation
+      # (SuggestHelper) fails with "keywords_path: file not readable".
+      FESS_DICTIONARY_PATH: "/usr/share/opensearch/config/dictionary/"
+      FESS_PLUGINS: "${FESS_PLUGINS:-fess-webapp-multimodal:15.7.0}"
+      # fess_config.properties overrides (-Dfess.config.*), the multimodal
+      # fess.multimodal.* properties (read by fess-webapp-multimodal), and the CLIP
+      # server endpoint. rank.fusion.searchers is intentionally left unset so the
+      # default (keyword) and multi_modal (CLIP) searchers are combined via hybrid
+      # rank fusion rather than one replacing the other.
+      FESS_JAVA_OPTS: >-
+        -Xms${FESS_HEAP:-1g} -Xmx${FESS_HEAP:-1g}
+        -Dfess.config.crawler.document.cache.enabled=false
+        -Dfess.config.adaptive.load.control=0
+        -Dfess.config.query.facet.fields=label,host
+        -Dfess.config.query.additional.api.response.fields=searcher
+        -Dfess.config.paging.search.page.size=${SEARCH_PAGE_SIZE:-20}
+        -Dfess.config.index.user.initial_password=${FESS_ADMIN_PASSWORD:-admin}
+        -Dthumbnail.width=512
+        -Dthumbnail.height=512
+        -Dfess.config.job.system.property.filter.pattern=fess.multimodal.*|clip.*
+        -Dfess.multimodal.content.field=content_vector
+        -Dfess.multimodal.content.dimension=${MULTIMODAL_DIMENSION:-512}
+        -Dfess.multimodal.content.method=hnsw
+        -Dfess.multimodal.content.engine=lucene
+        -Dfess.multimodal.content.space_type=cosinesimil
+        -Dfess.multimodal.min_score=${CLIP_MIN_SCORE:-0.56}
+        -Dclip.server.endpoint=http://clip_server:51000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v2/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    volumes:
+      - ./data/fess/opt/fess:/opt/fess
+      - ./data/fess/var/lib/fess:/var/lib/fess
+      - ./data/fess/var/log/fess:/var/log/fess
+      - ./data/fess/usr/share/fess/app/WEB-INF/plugin:/usr/share/fess/app/WEB-INF/plugin
+      - ./data/fess/usr/share/fess/app/themes/${THEME_NAME:-mosaic}:/usr/share/fess/app/themes/${THEME_NAME:-mosaic}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - multimodal_net
+
+  # One-shot: after fess01 is healthy, ensure the document index carries the
+  # multimodal vector mapping (content_vector), logging in via the LastaFlute admin
+  # form flow and triggering Admin > Maintenance > Reindex with replaceAliases=on.
+  # Idempotent: no-ops when content_vector is already present, so it is safe on
+  # every restart. See bin/init-fess-index.sh.
+  init-fess-index:
+    image: ${ALPINE_IMAGE:-alpine:3.21}
+    depends_on:
+      fess01:
+        condition: service_healthy
+    environment:
+      - FESS_URL=http://fess01:8080
+      - SEARCH_ENGINE_HTTP_URL=http://search01:9200
+      - FESS_ADMIN_PASSWORD=${FESS_ADMIN_PASSWORD:-admin}
+      - MAX_WAIT=${MAX_WAIT:-900}
+      - MULTIMODAL_DIMENSION=${MULTIMODAL_DIMENSION:-512}
+    volumes:
+      - ./bin/init-fess-index.sh:/init-fess-index.sh:ro
+    entrypoint: ["sh", "/init-fess-index.sh"]
+    restart: "no"
     networks:
       - multimodal_net
 
 networks:
   multimodal_net:
     driver: bridge
-

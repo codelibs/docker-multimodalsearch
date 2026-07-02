@@ -1,0 +1,8 @@
+theme.default=mosaic
+thumbnail.enabled=true
+suggest.search.log.enabled=true
+suggest.document.enabled=true
+login.required=false
+crawler.document.max.site.length=-1
+purge.by.bots=
+purge.search.log.day=90

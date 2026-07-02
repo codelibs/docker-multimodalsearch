@@ -1,7 +1,21 @@
+/.env
 /data/https-portal/ssl_certs
-#/data/fess/opt/fess
+/data/opensearch/usr/share/opensearch/data
+/data/opensearch/usr/share/opensearch/config/dictionary
 /data/fess/var/lib/fess
 /data/fess/var/log/fess
 /data/fess/usr/share/fess/app/WEB-INF/plugin
-/data/opensearch/usr/share/opensearch/data
-/data/opensearch/usr/share/opensearch/config/dictionary
+/data/fess/usr/share/fess/app/themes
+/data/fess/opt/fess/system.properties
+/data/clip_server/
+/data/content/*
+!/data/content/.gitkeep
+/dist
+/config/clip.yaml
+/docker/clip-server/.cache/
+/docker/clip-server/.venv/
+/docker/clip-server/**/__pycache__/
+*.pyc
+
+# Internal planning docs (specs/plans from brainstorming/writing-plans skills)
+/docs/superpowers/
