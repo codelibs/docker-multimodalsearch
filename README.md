@@ -329,6 +329,14 @@ template by file name.
   same-origin `/thumbnail/` endpoint — but a crawled image's original URL
   (`http://content/...`) won't open directly in a host browser tab.
 
+## Known limitations
+
+Text→image semantic relevance with the current default multilingual model (`xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k`) is limited: CLIP text embeddings come out poorly differentiated via `jinaai/clip-server` (the multilingual text projection isn't correctly applied by this clip-server build), so text queries don't discriminate well between image results. This is a model/clip-server pairing issue, not a Fess or plugin bug.
+
+**What works:** crawling and indexing, image (CLIP) vector generation, kNN wiring, thumbnails, gallery UI, keyword (BM25) search, and per-result searcher badges.
+
+**Workaround:** For reliable text→image results, swap to an English model. In `.env`, set `CLIP_MODEL_NAME=ViT-B-32::openai` and `MULTIMODAL_DIMENSION=512`, then re-run `bash bin/setup.sh`, restart with `docker compose up -d --force-recreate clip_server fess01`, and re-crawl.
+
 ## Optional: a larger sample dataset with FiftyOne
 
 `bin/fetch-sample-images.sh` seeds a small (~35 image) demo set. For a larger, more
