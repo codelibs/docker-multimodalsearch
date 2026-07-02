@@ -121,7 +121,11 @@ services:
         condition: service_healthy
     environment:
       SEARCH_ENGINE_HTTP_URL: "http://search01:9200"
-      FESS_DICTIONARY_PATH: "/usr/share/opensearch/config/dictionary"
+      # Trailing slash is REQUIRED: Fess builds analyzer keywords_path values by
+      # concatenating this prefix with e.g. "ar/protwords.txt"; without the slash it
+      # resolves to ".../dictionaryar/protwords.txt" and OpenSearch analyzer creation
+      # (SuggestHelper) fails with "keywords_path: file not readable".
+      FESS_DICTIONARY_PATH: "/usr/share/opensearch/config/dictionary/"
       FESS_PLUGINS: "${FESS_PLUGINS:-fess-webapp-multimodal:15.7.0}"
       # fess_config.properties overrides (-Dfess.config.*), the multimodal
       # fess.multimodal.* properties (read by fess-webapp-multimodal), and the CLIP
