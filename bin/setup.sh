@@ -24,7 +24,8 @@ fi
 # spaces/special chars in unrelated keys like FESS_ADMIN_PASSWORD).
 env_get() {
   [ -f .env ] || return 0
-  sed -n "s/^$1=//p" .env | tail -n1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+  sed -n "s/^$1=//p" .env | tail -n1 \
+    | sed -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
 }
 THEME_NAME="${THEME_NAME:-$(env_get THEME_NAME)}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-$(env_get FESS_THEMES_REPO)}"
@@ -36,6 +37,22 @@ FESS_THEMES_DIR="${FESS_THEMES_DIR:-$(env_get FESS_THEMES_DIR)}"
 THEME_NAME="${THEME_NAME:-mosaic}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-https://github.com/codelibs/fess-themes.git}"
 FESS_THEMES_REF="${FESS_THEMES_REF:-main}"
+
+# clip_server runs as a non-root user (docker/clip-server/Dockerfile creates the
+# "clip" user; compose runs it as `user: "${CLIP_UID:-1000}:${CLIP_GID:-1000}"`).
+# Pin that UID/GID to the host user so the bind-mounted model cache
+# (./data/clip_server/cache) stays writable when the container downloads the
+# model on first boot. docker compose reads .env declaratively and cannot run
+# `id`, so persist the resolved values into .env when they are absent.
+CLIP_UID="${CLIP_UID:-$(env_get CLIP_UID)}"
+CLIP_GID="${CLIP_GID:-$(env_get CLIP_GID)}"
+# Fall back to the host user for empty or non-numeric values so an unset key, a
+# blank `CLIP_UID=`, or a CRLF/whitespace-polluted .env can never yield an
+# invalid compose `user:` spec or diverge from the chown below.
+case "${CLIP_UID}" in "" | *[!0-9]*) CLIP_UID="$(id -u)" ;; esac
+case "${CLIP_GID}" in "" | *[!0-9]*) CLIP_GID="$(id -g)" ;; esac
+grep -qE '^CLIP_UID=[0-9]' .env 2>/dev/null || printf 'CLIP_UID=%s\n' "${CLIP_UID}" >> .env
+grep -qE '^CLIP_GID=[0-9]' .env 2>/dev/null || printf 'CLIP_GID=%s\n' "${CLIP_GID}" >> .env
 
 THEME_DEST="./data/fess/usr/share/fess/app/themes/${THEME_NAME}"
 
@@ -123,7 +140,7 @@ if [ "$(uname -s)" = "Linux" ]; then
   sudo chown -R 1001 ./data/fess/usr/share/fess/app/themes
   sudo chown -R 1000 ./data/opensearch/usr/share/opensearch/data
   sudo chown -R 1000 ./data/opensearch/usr/share/opensearch/config/dictionary
-  sudo chown -R 1000 ./data/clip_server/cache
+  sudo chown -R "${CLIP_UID}:${CLIP_GID}" ./data/clip_server/cache
 fi
 
 echo "Setup complete. Next: docker compose up -d"

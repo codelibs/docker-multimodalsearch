@@ -49,10 +49,15 @@ services:
     image: ${CLIP_SERVER_IMAGE:-docker-multimodalsearch/clip-server:local}
     container_name: clip_server
     restart: always
+    # Run as non-root; set CLIP_UID/CLIP_GID to the host user that owns the
+    # bind-mounted model cache (./data/clip_server/cache) so it stays writable.
+    # Defaults to 1000:1000, matching the image's built-in "clip" user.
+    user: "${CLIP_UID:-1000}:${CLIP_GID:-1000}"
     environment:
       CLIP_MODEL_NAME: ${CLIP_MODEL_NAME:-xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k}
       MULTIMODAL_DIMENSION: ${MULTIMODAL_DIMENSION:-512}
       CLIP_DEVICE: ${CLIP_DEVICE:-cpu}
+      CLIP_MAX_IMAGE_PIXELS: ${CLIP_MAX_IMAGE_PIXELS:-64000000}
       HF_HOME: /cache/huggingface
     volumes:
       - ./data/clip_server/cache:/cache

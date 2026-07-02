@@ -1,11 +1,22 @@
 import io
+import os
+import warnings
 
 import numpy as np
 import open_clip
 import torch
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from app.config import ServerConfig
+from app.errors import ImageDecodeError
+
+# clip_server decodes untrusted, crawler-supplied image bytes. Cap the pixel
+# count Pillow will decode and promote the near-limit DecompressionBombWarning to
+# an error, so a decompression bomb is rejected (see _decode_image) instead of
+# allocating a huge RGB buffer. Overridable via CLIP_MAX_IMAGE_PIXELS.
+MAX_IMAGE_PIXELS = int(os.environ.get("CLIP_MAX_IMAGE_PIXELS", str(64_000_000)))
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+warnings.simplefilter("error", Image.DecompressionBombWarning)
 
 
 class OpenClipEncoder:
@@ -53,11 +64,28 @@ class OpenClipEncoder:
         return features.cpu().numpy().astype(np.float32).tolist()
 
     def encode_images(self, images: list[bytes]) -> list[list[float]]:
-        tensors = [
-            self._preprocess(Image.open(io.BytesIO(raw)).convert("RGB")) for raw in images
-        ]
+        tensors = [self._preprocess(self._decode_image(raw)) for raw in images]
         batch = torch.stack(tensors).to(self._device)
         with torch.no_grad():
             features = self._model.encode_image(batch)
             features = features / features.norm(dim=-1, keepdim=True)
         return features.cpu().numpy().astype(np.float32).tolist()
+
+    @staticmethod
+    def _decode_image(raw: bytes) -> Image.Image:
+        """Decode untrusted image bytes to an RGB image, or raise ImageDecodeError.
+
+        Guards the crawler-fed decode path: malformed/truncated bytes and
+        oversized (decompression-bomb) images raise ImageDecodeError, which
+        server.py surfaces as HTTP 400 instead of a 500.
+        """
+        try:
+            return Image.open(io.BytesIO(raw)).convert("RGB")
+        except (
+            UnidentifiedImageError,
+            Image.DecompressionBombError,
+            Image.DecompressionBombWarning,
+            OSError,
+            ValueError,
+        ) as exc:
+            raise ImageDecodeError(f"cannot decode image bytes: {exc}") from exc

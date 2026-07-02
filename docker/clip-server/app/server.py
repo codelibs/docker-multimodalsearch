@@ -6,6 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from app.errors import ImageDecodeError
+
 
 class Encoder(Protocol):
     def encode_texts(self, texts: list[str]) -> list[list[float]]: ...
@@ -38,7 +40,12 @@ def create_app(encoder: Encoder) -> FastAPI:
                     raw = base64.b64decode(blob, validate=True)
                 except (binascii.Error, ValueError):
                     return JSONResponse(status_code=400, content={"error": "invalid base64 blob"})
-                embedding = (await run_in_threadpool(encoder.encode_images, [raw]))[0]
+                try:
+                    embedding = (await run_in_threadpool(encoder.encode_images, [raw]))[0]
+                except ImageDecodeError as exc:
+                    return JSONResponse(
+                        status_code=400, content={"error": f"invalid image blob: {exc}"}
+                    )
             else:
                 return JSONResponse(
                     status_code=400, content={"error": "each data item needs 'text' or 'blob'"}
