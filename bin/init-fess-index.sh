@@ -82,8 +82,9 @@ if doc_has_vector; then
   #     MULTIMODAL_DIMENSION; a Fess reindex only copies documents and does NOT
   #     recompute embeddings, so a dimension change requires a full re-crawl.
   expected_dim="${MULTIMODAL_DIMENSION:-512}"
-  current_dim="$(curl -s "${SEARCH_ENGINE_HTTP_URL}/${DOC_ALIAS}/_mapping" \
-    | jq -r 'first(.[].mappings.properties.content_vector.dimension) // empty')"
+  current_dim="$(curl -fsS "${SEARCH_ENGINE_HTTP_URL}/${DOC_ALIAS}/_mapping" 2>/dev/null \
+    | jq -r 'first(.[].mappings.properties.content_vector.dimension) // empty' 2>/dev/null)" \
+    || current_dim=""
   if [ -n "${current_dim}" ] && [ "${current_dim}" != "${expected_dim}" ]; then
     log "WARN: content_vector dimension mismatch: index=${current_dim} expected=${expected_dim}."
     log "WARN: The model/dimension changed. Recreate the index and re-crawl (re-embed);"
