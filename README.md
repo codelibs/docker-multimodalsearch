@@ -250,16 +250,20 @@ mapping. To swap models:
    docker compose up -d --build clip_server
    docker compose up -d --force-recreate fess01
    ```
-3. **Reindex manually.** `init-fess-index` already ran once during the initial setup
-   and only checks whether the `content_vector` field *exists* — it has no way to
+3. **Recreate the index mapping.** `init-fess-index` already ran once during the initial
+   setup and only checks whether the `content_vector` field *exists* — it has no way to
    detect that its dimension changed, so it will **not** re-trigger automatically. Go
    to **Admin > Maintenance** in the Fess admin UI and run **Reindex** (with alias
-   replacement) to rebuild the document index with the new vector dimension.
-4. **Re-crawl** (**Admin > System > Scheduler > Default Crawler > Start Now**). A plain
-   reindex only copies existing documents between indices — it does not recompute
-   embeddings, so it cannot backfill the new dimension; copying an existing 512-dim
-   vector into the new 1024-dim field fails outright. Re-crawling re-embeds every
-   document against the running `clip_server`, producing correctly-sized vectors.
+   replacement) to recreate the index with the `content_vector` field at the new
+   dimension. This rebuilds the *mapping* only — existing documents' old-dimension
+   vectors do **not** carry over (see the next step), so expect the crawled documents to
+   need re-embedding.
+4. **Re-crawl** (**Admin > System > Scheduler > Default Crawler > Start Now**). This is
+   what actually repopulates the vectors: a reindex only copies existing documents
+   between indices — it does not recompute embeddings, and copying an existing 512-dim
+   vector into the new 1024-dim field fails outright, so the old vectors cannot be
+   carried forward at all. Re-crawling re-embeds every document against the running
+   `clip_server`, producing correctly-sized vectors.
 
 You can also tune `CLIP_MIN_SCORE` (default `0.5`) in `.env`, which sets the minimum
 similarity score a CLIP match must reach to be returned; its ideal cutoff shifts with
