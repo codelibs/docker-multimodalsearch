@@ -53,8 +53,10 @@ Japanese-only. None of these beat "keep the model, fix the server" for this depl
    `open_clip`** embedding server that **emulates the Jina clip-server `/post` protocol**, so
    the plugin's `CasClient` works unchanged and all changes stay in this repo.
 2. **Default model / hardware:** CPU-first — keep `xlm-roberta-base-ViT-B-32` (512-dim), so
-   the default path needs no reindex and stays laptop-runnable. Document
-   `xlm-roberta-large-ViT-H-14` (1024-dim) as an opt-in higher-quality upgrade.
+   the default path needs no new index mapping and stays laptop-runnable. Document
+   `xlm-roberta-large-ViT-H-14` (1024-dim) as an opt-in higher-quality upgrade. A fresh install
+   needs no reindex, but *upgrading an existing deployment* (any server/model change, even at the
+   same 512-dim) requires a full **re-crawl / re-embed** — see §9.
 3. **Search modes:** text-to-image only.
 
 ## 5. Architecture
@@ -141,13 +143,22 @@ a second repo and a plugin release, so it requires explicit re-confirmation befo
 - Model cache volume: switch the bind-mounted cache path from Jina's `~/.cache/clip` to the
   `open_clip` / HuggingFace hub download cache directory, preserving persistent/offline reuse.
 
-## 9. Model swap & dimension handling
+## 9. Model swap, dimension & re-crawl handling
 
-- Document the H/14 upgrade: set `CLIP_MODEL_NAME=xlm-roberta-large-ViT-H-14::frozen_laion5b_s13b_b90k`
-  and `MULTIMODAL_DIMENSION=1024`, recreate `clip_server`, and **reindex** (a dimension change
-  requires recreating the `content_vector` mapping).
+- **Any server/model change re-embeds the space.** Replacing the old (buggy) server with the new
+  one changes the actual `content_vector` values even at the same 512-dim. Image vectors already
+  indexed by the old server are inconsistent with new query vectors → stale/garbage kNN. Therefore
+  **upgrading an existing deployment requires deleting the crawled documents and re-crawling
+  (re-embedding)**, not a Fess "reindex". A Fess reindex only *copies* documents into the new
+  mapping; it does **not** re-invoke the CLIP plugin to recompute embeddings.
+- **H/14 upgrade:** set `CLIP_MODEL_NAME=xlm-roberta-large-ViT-H-14::frozen_laion5b_s13b_b90k` and
+  `MULTIMODAL_DIMENSION=1024`, recreate `clip_server`, recreate the index (the 512→1024 mapping
+  change; a plain reindex would fail copying 512-dim vectors into a 1024-dim knn field), then
+  **re-crawl** to populate the new vectors.
 - Improve `bin/init-fess-index.sh` to detect/flag a dimension change (it currently only checks
-  field existence), so a swapped dimension does not silently mismatch the existing mapping.
+  field existence) so a swapped dimension does not silently mismatch the existing mapping, and use
+  its warning to remind operators to re-crawl. `CLIP_MIN_SCORE` (the `min_score` kNN cutoff) is
+  tuned against a specific model's score distribution and should be re-checked after a swap.
 
 ## 10. Theme
 
