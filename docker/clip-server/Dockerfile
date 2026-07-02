@@ -1,17 +1,33 @@
-# The stock `jinaai/clip-server` image does not bundle HuggingFace `transformers`.
-# The multilingual open_clip checkpoints this stack uses by default
-# (e.g. xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k) have an XLM-RoBERTa text
-# tower that open_clip loads via `transformers` at model-load time. Without it the
-# Jina Flow aborts on boot with:
-#   RuntimeError: Please `pip install transformers` to use pre-trained HuggingFace models
-# So we add a Python-3.8-compatible `transformers` on top of the stock image.
-#
-# English-only CLIP models (e.g. ViT-B-32::openai) do NOT need this, but installing
-# transformers is harmless for them, so this image works for every supported model.
-ARG CLIP_SERVER_BASE=jinaai/clip-server
-FROM ${CLIP_SERVER_BASE}
+FROM python:3.11-slim
 
-# Pinned to a release that still supports the image's Python 3.8 and is contemporary
-# with its open_clip. Override at build time with --build-arg TRANSFORMERS_VERSION=...
-ARG TRANSFORMERS_VERSION=4.30.2
-RUN pip install --no-cache-dir "transformers==${TRANSFORMERS_VERSION}"
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_HOME=/cache/huggingface \
+    CLIP_MODEL_NAME=xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k \
+    MULTIMODAL_DIMENSION=512 \
+    CLIP_DEVICE=cpu \
+    CLIP_SERVER_PORT=51000
+
+WORKDIR /app
+
+# CPU-only torch + torchvision. BuildKit populates TARGETARCH automatically.
+#   amd64 : PyPI's default torch wheel is the multi-GB CUDA build, so pull the
+#           CPU-only wheels from the pytorch cpu index.
+#   arm64 : the pytorch cpu index has NO linux-aarch64 wheels, but PyPI's
+#           default aarch64 torch/torchvision wheels are already CPU-only.
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        pip install --no-cache-dir "torch==2.2.2" "torchvision==0.17.2" \
+            --index-url https://download.pytorch.org/whl/cpu ; \
+    else \
+        pip install --no-cache-dir "torch==2.2.2" "torchvision==0.17.2" ; \
+    fi
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ ./app/
+
+EXPOSE 51000
+
+CMD ["uvicorn", "app.server:create_production_app", "--factory", "--host", "0.0.0.0", "--port", "51000"]

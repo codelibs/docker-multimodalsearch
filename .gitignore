@@ -12,3 +12,7 @@
 !/data/content/.gitkeep
 /dist
 /config/clip.yaml
+/docker/clip-server/.cache/
+/docker/clip-server/.venv/
+/docker/clip-server/**/__pycache__/
+*.pyc

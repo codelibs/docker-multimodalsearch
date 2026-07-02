@@ -47,3 +47,14 @@ def create_app(encoder: Encoder) -> FastAPI:
         return JSONResponse(content={"data": results})
 
     return app
+
+
+def build_encoder_from_env() -> Encoder:
+    from app.config import load_config
+    from app.encoder import OpenClipEncoder
+
+    return OpenClipEncoder(load_config())
+
+
+def create_production_app() -> FastAPI:
+    return create_app(build_encoder_from_env())
