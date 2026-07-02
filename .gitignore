@@ -7,6 +7,7 @@
 /data/fess/usr/share/fess/app/WEB-INF/plugin
 /data/fess/usr/share/fess/app/themes
 /data/fess/opt/fess/system.properties
+/data/clip_server/
 /data/content/*
 !/data/content/.gitkeep
 /dist
