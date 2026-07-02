@@ -29,7 +29,7 @@ All five services run on a single Docker Compose network, `multimodal_net`:
                                    ▼            ▼
                      ┌───────────────────┐   ┌───────────────────────┐
                      │ search01            │   │ clip_server             │
-                     │ fess-opensearch      │   │ jinaai/clip-server      │
+                     │ fess-opensearch      │   │ custom open_clip server │
                      │ :3.7.0               │   │ CLIP model (~1.6 GB     │
                      │ 127.0.0.1:9200        │   │ download on first boot)│
                      │ (loopback only)       │   └───────────────────────┘
@@ -53,9 +53,12 @@ All five services run on a single Docker Compose network, `multimodal_net`:
 - **`search01`** — OpenSearch 3.7 (`ghcr.io/codelibs/fess-opensearch:3.7.0`), roles
   `cluster_manager,data,ingest,ml`. Stores documents and their CLIP vectors and serves
   both the BM25 and kNN branches of every query.
-- **`clip_server`** — built from `docker/clip-server/Dockerfile` (stock jinaai/clip-server
-  image with pinned `transformers` for multilingual model support). Loads the configured
-  CLIP model and turns text and images into embeddings, on demand, for `fess01`.
+- **`clip_server`** — a custom FastAPI + open_clip server (`docker/clip-server/`) that
+  loads the configured OpenCLIP XLM-RoBERTa model natively and serves `POST /post`
+  (Jina-compatible), returning L2-normalized text/image embeddings on demand for
+  `fess01`. The `fess-webapp-multimodal` plugin talks to it unchanged at
+  `http://clip_server:51000`. The model is MIT-licensed. First boot downloads ~1.6 GB
+  into `./data/clip_server/cache` and requires network access at runtime.
 - **`content`** — a tiny `nginx:alpine` server exposing `./data/content` (read-only)
   as `http://content/` on the internal network only, so Fess's crawler and thumbnail
   generator fetch real HTTP responses (thumbnails render properly) instead of hitting
@@ -98,8 +101,6 @@ bash bin/setup.sh
 This host-side script (no Docker/Fess/OpenSearch calls) is safe to re-run and:
 
 - creates the bind-mount data directories under `./data`;
-- renders the live `config/clip.yaml` from `config/clip.yaml.template`, substituting
-  `CLIP_MODEL_NAME`;
 - seeds `./data/fess/opt/fess/system.properties` from its tracked template **on first
   run only** (sets `theme.default=${THEME_NAME}`; the live file is git-ignored so Fess
   can rewrite it later via Admin > General without conflicting with `git pull`);
@@ -229,7 +230,9 @@ MULTIMODAL_DIMENSION=512
 `xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k` is multilingual, 512-dimensional, and
 CPU-feasible. For maximum retrieval quality (at the cost of a larger download and more
 RAM/GPU), swap to `xlm-roberta-large-ViT-H-14::frozen_laion5b_s13b_b90k`, which is
-1024-dimensional.
+1024-dimensional. The H/14 model is significantly heavier to run — a GPU is
+recommended; set `CLIP_DEVICE=auto` so `clip_server` uses one if available and falls
+back to CPU otherwise.
 
 `CLIP_MODEL_NAME` and `MULTIMODAL_DIMENSION` must always be changed **together** — the
 dimension is baked both into the CLIP encoder and into the `content_vector` kNN field
@@ -239,32 +242,48 @@ mapping. To swap models:
    ```
    CLIP_MODEL_NAME=xlm-roberta-large-ViT-H-14::frozen_laion5b_s13b_b90k
    MULTIMODAL_DIMENSION=1024
+   CLIP_DEVICE=auto
    ```
-2. Re-run `bash bin/setup.sh` to re-render `config/clip.yaml` with the new model name.
-3. Recreate `clip_server` (to load the new model) and `fess01` (to pick up the new
-   `MULTIMODAL_DIMENSION` in `FESS_JAVA_OPTS`):
+2. Rebuild and recreate `clip_server` to load the new model, then recreate `fess01` to
+   pick up the new `MULTIMODAL_DIMENSION` in `FESS_JAVA_OPTS`:
    ```sh
-   docker compose up -d --force-recreate clip_server fess01
+   docker compose up -d --build clip_server
+   docker compose up -d --force-recreate fess01
    ```
-4. **Reindex manually.** `init-fess-index` already ran once during the initial setup
+3. **Reindex manually.** `init-fess-index` already ran once during the initial setup
    and only checks whether the `content_vector` field *exists* — it has no way to
    detect that its dimension changed, so it will **not** re-trigger automatically. Go
    to **Admin > Maintenance** in the Fess admin UI and run **Reindex** (with alias
    replacement) to rebuild the document index with the new vector dimension.
-5. Re-crawl (**Admin > System > Scheduler > Default Crawler > Start Now**) so existing
-   documents are re-embedded with the new model.
+4. **Re-crawl** (**Admin > System > Scheduler > Default Crawler > Start Now**). A plain
+   reindex only copies existing documents between indices — it does not recompute
+   embeddings, so it cannot backfill the new dimension; copying an existing 512-dim
+   vector into the new 1024-dim field fails outright. Re-crawling re-embeds every
+   document against the running `clip_server`, producing correctly-sized vectors.
 
 You can also tune `CLIP_MIN_SCORE` (default `0.5`) in `.env`, which sets the minimum
-similarity score a CLIP match must reach to be returned.
+similarity score a CLIP match must reach to be returned; its ideal cutoff shifts with
+the model, so re-check it after any swap.
 
-Three additional optional `.env` variables control the clip-server build and image:
-- `CLIP_SERVER_BASE` (default `jinaai/clip-server`): base image to build from.
-- `TRANSFORMERS_VERSION` (default `4.30.0`): pinned transformers library version (must
-  be compatible with the base image's Python version; multilingual models require
-  transformers at load time). English-only CLIP models (e.g. `ViT-B-32::openai`) do not
-  need transformers, but the local image includes it harmlessly.
-- `CLIP_SERVER_IMAGE` (default `multimodal-clip-server:latest`): name and tag of the
-  locally-built image. All three have working defaults and rarely need to be changed.
+### Upgrading an existing deployment
+
+Any change to the `clip_server` image or `CLIP_MODEL_NAME` re-embeds the vector space —
+**even when `MULTIMODAL_DIMENSION` stays the same**. The new server's embeddings are
+not numerically comparable to the old one's, so vectors already indexed by the previous
+server are inconsistent with the query vectors the new server produces; kNN matches
+degrade instead of failing loudly, which makes this easy to miss.
+
+After upgrading `clip_server` or its model:
+
+1. Delete the crawled documents and **re-crawl** rather than reindexing. A Fess
+   reindex (**Admin > Maintenance > Reindex**) only copies documents from one index to
+   another — it does not recompute embeddings — so it cannot fix vectors produced by
+   the old server. Re-crawling (**Admin > System > Scheduler > Default Crawler >
+   Start Now**) re-embeds every document against the currently running `clip_server`.
+2. Re-check `CLIP_MIN_SCORE` in `.env` — its ideal cutoff shifts with the model.
+3. It's safe to clear the old `./data/clip_server/cache` contents. That directory is
+   bind-mounted to the server's model cache; the new server uses a different cache
+   layout, so stale bytes from the previous model are never reused.
 
 ## Theme
 
@@ -331,11 +350,11 @@ template by file name.
 
 ## Known limitations
 
-Text→image semantic relevance with the current default multilingual model (`xlm-roberta-base-ViT-B-32::laion5b-s13b-b90k`) is limited: CLIP text embeddings come out poorly differentiated via `jinaai/clip-server` (the multilingual text projection isn't correctly applied by this clip-server build), so text queries don't discriminate well between image results. This is a model/clip-server pairing issue, not a Fess or plugin bug.
+None currently. Multilingual text queries (including Japanese) are supported: the
+custom `clip_server` (see [Architecture](#architecture)) produces well-differentiated
+embeddings across languages, so text→image relevance is not limited to English.
 
-**What works:** crawling and indexing, image (CLIP) vector generation, kNN wiring, thumbnails, gallery UI, keyword (BM25) search, and per-result searcher badges.
-
-**Workaround:** For reliable text→image results, swap to an English model. In `.env`, set `CLIP_MODEL_NAME=ViT-B-32::openai` and `MULTIMODAL_DIMENSION=512`, then re-run `bash bin/setup.sh`, restart with `docker compose up -d --force-recreate clip_server fess01`, and re-crawl.
+**What works:** crawling and indexing, image (CLIP) vector generation, kNN wiring, thumbnails, gallery UI, keyword (BM25) search, per-result searcher badges, and multilingual (including Japanese) text→image relevance.
 
 ## Optional: a larger sample dataset with FiftyOne
 
