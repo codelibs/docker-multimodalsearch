@@ -9,10 +9,13 @@ cd "$(dirname "$0")/.."
 #   - create the bind-mount data directories
 #   - seed the live system.properties from the tracked template (first run only)
 #   - sync the static UI theme from fess-themes
+#   - generate data/fess/bin/generate-thumbnail from the pinned Fess image with a
+#     larger image_size (the shipped script hardcodes 100x100)
 #   - drop any stale multimodal plugin jar (plugins now come via FESS_PLUGINS,
 #     not a locally downloaded jar)
 #
-# This script does not talk to Docker, Fess, or OpenSearch; re-running it is safe.
+# It runs one `docker run --rm` to read generate-thumbnail out of the Fess image;
+# it never talks to a running Fess or OpenSearch. Re-running it is safe.
 
 if [ ! -f .env ]; then
   echo "No .env found; creating one from .env.example..."
@@ -31,12 +34,18 @@ THEME_NAME="${THEME_NAME:-$(env_get THEME_NAME)}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-$(env_get FESS_THEMES_REPO)}"
 FESS_THEMES_REF="${FESS_THEMES_REF:-$(env_get FESS_THEMES_REF)}"
 FESS_THEMES_DIR="${FESS_THEMES_DIR:-$(env_get FESS_THEMES_DIR)}"
+THUMBNAIL_SIZE="${THUMBNAIL_SIZE:-$(env_get THUMBNAIL_SIZE)}"
+FESS_VERSION="${FESS_VERSION:-$(env_get FESS_VERSION)}"
+FESS_IMAGE="${FESS_IMAGE:-$(env_get FESS_IMAGE)}"
 
 # Defaults mirror .env.example; used if a key is missing from both the
 # environment and .env.
 THEME_NAME="${THEME_NAME:-mosaic}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-https://github.com/codelibs/fess-themes.git}"
 FESS_THEMES_REF="${FESS_THEMES_REF:-main}"
+THUMBNAIL_SIZE="${THUMBNAIL_SIZE:-512x512}"
+FESS_VERSION="${FESS_VERSION:-15.8.0}"
+FESS_IMAGE="${FESS_IMAGE:-ghcr.io/codelibs/fess:${FESS_VERSION}-noble}"
 
 # clip_server runs as a non-root user (docker/clip-server/Dockerfile creates the
 # "clip" user; compose runs it as `user: "${CLIP_UID:-1000}:${CLIP_GID:-1000}"`).
@@ -75,6 +84,7 @@ mkdir -p ./data/content
 touch ./data/content/.gitkeep
 mkdir -p ./data/clip_server/cache
 mkdir -p ./data/https-portal/ssl_certs
+mkdir -p ./data/fess/bin
 
 # Seed the live system.properties from the tracked template on first run only.
 # The live file is git-ignored so Fess can rewrite it (Admin > General) without
@@ -123,6 +133,30 @@ rm -rf "${THEME_DEST}"
 mkdir -p "${THEME_DEST}"
 cp -R "${staging}/." "${THEME_DEST}/"
 echo "Theme synced to ${THEME_DEST}"
+
+# Generate a generate-thumbnail with a larger image_size. The shipped script
+# (src/main/assemblies/files/generate-thumbnail) hardcodes `image_size=100x100`,
+# which is far too small for a thumbnail-first gallery; there is no Fess config key
+# for it (-Dthumbnail.width/-Dthumbnail.height do NOT exist in the core), so the
+# script itself has to be rewritten and bind-mounted over the image's copy.
+# Read it out of the pinned image so it stays in sync with the Fess version.
+THUMBNAIL_SCRIPT=./data/fess/bin/generate-thumbnail
+echo "Generating ${THUMBNAIL_SCRIPT} (image_size=${THUMBNAIL_SIZE}) from ${FESS_IMAGE}..."
+if docker run --rm --entrypoint cat "${FESS_IMAGE}" /usr/share/fess/bin/generate-thumbnail \
+  | sed "s/^image_size=.*/image_size=${THUMBNAIL_SIZE}/" > "${THUMBNAIL_SCRIPT}.tmp" 2>/dev/null \
+  && grep -q "^image_size=${THUMBNAIL_SIZE}$" "${THUMBNAIL_SCRIPT}.tmp"; then
+  mv "${THUMBNAIL_SCRIPT}.tmp" "${THUMBNAIL_SCRIPT}"
+  chmod +x "${THUMBNAIL_SCRIPT}"
+  echo "Thumbnail script written to ${THUMBNAIL_SCRIPT}"
+else
+  rm -f "${THUMBNAIL_SCRIPT}.tmp"
+  echo "WARNING: could not generate ${THUMBNAIL_SCRIPT} from ${FESS_IMAGE}."
+  echo "         Thumbnails will fall back to the image's built-in 100x100 script."
+  # compose bind-mounts this path; a missing file would be created as a directory.
+  [ -f "${THUMBNAIL_SCRIPT}" ] || docker run --rm --entrypoint cat "${FESS_IMAGE}" \
+    /usr/share/fess/bin/generate-thumbnail > "${THUMBNAIL_SCRIPT}" 2>/dev/null || true
+  [ -s "${THUMBNAIL_SCRIPT}" ] && chmod +x "${THUMBNAIL_SCRIPT}"
+fi
 
 # Drop any previously installed multimodal plugin jar so a FESS_PLUGINS version
 # change doesn't leave two versions in the persisted plugin dir (Fess would load

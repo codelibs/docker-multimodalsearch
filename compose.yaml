@@ -1,6 +1,6 @@
 services:
   search01:
-    image: ${OPENSEARCH_IMAGE:-ghcr.io/codelibs/fess-opensearch:3.7.0}
+    image: ${OPENSEARCH_IMAGE:-ghcr.io/codelibs/fess-opensearch:${OPENSEARCH_VERSION:-3.8.0}}
     container_name: search01
     restart: always
     environment:
@@ -9,7 +9,8 @@ services:
       - cluster.initial_cluster_manager_nodes=search01
       - cluster.name=fess-search
       - bootstrap.memory_lock=true
-      - node.roles=cluster_manager,data,ingest,ml
+      # No `ml` role: embeddings come from the CLIP server, not ML Commons.
+      - node.roles=cluster_manager,data,ingest
       - "OPENSEARCH_JAVA_OPTS=-Xms${OPENSEARCH_HEAP:-1g} -Xmx${OPENSEARCH_HEAP:-1g}"
       - "DISABLE_INSTALL_DEMO_CONFIG=true"
       - "DISABLE_SECURITY_PLUGIN=true"
@@ -100,7 +101,10 @@ services:
       - multimodal_net
 
   fess01:
-    image: ${FESS_IMAGE:-ghcr.io/codelibs/fess:15.7.0-noble}
+    # The -noble variant is REQUIRED: it carries imagemagick/unoconv/poppler-utils,
+    # which generate-thumbnail needs. The default alpine image has none of them and
+    # the gallery grid would render without a single thumbnail.
+    image: ${FESS_IMAGE:-ghcr.io/codelibs/fess:${FESS_VERSION:-15.8.0}-noble}
     container_name: fess01
     restart: always
     ports:
@@ -119,12 +123,19 @@ services:
       # resolves to ".../dictionaryar/protwords.txt" and OpenSearch analyzer creation
       # (SuggestHelper) fails with "keywords_path: file not readable".
       FESS_DICTIONARY_PATH: "/usr/share/opensearch/config/dictionary/"
-      FESS_PLUGINS: "${FESS_PLUGINS:-fess-webapp-multimodal:15.7.0}"
-      # fess_config.properties overrides (-Dfess.config.*), the multimodal
-      # fess.multimodal.* properties (read by fess-webapp-multimodal), and the CLIP
-      # server endpoint. rank.fusion.searchers is intentionally left unset so the
-      # default (keyword) and multi_modal (CLIP) searchers are combined via hybrid
-      # rank fusion rather than one replacing the other.
+      FESS_PLUGINS: "${FESS_PLUGINS-fess-webapp-multimodal:15.8.0}"
+      # Two config channels are in play here:
+      #   -Dfess.config.*  -> fess_config.properties overrides
+      #   -Dfess.system.*  -> system.properties channel (FessProp#getSystemProperty).
+      # Every content_chunker.* key MUST use the -Dfess.system.* form; the core reads
+      # them through getSystemProperty and silently ignores -Dfess.config.content_chunker.*.
+      # Do not put content_chunker.* into data/fess/opt/fess/system.properties either:
+      # file values WIN over -Dfess.system.* (FessProp.java:176-178), which would make
+      # the .env-driven values here dead.
+      # No job.system.property.filter.pattern is needed: ExecJob forwards the
+      # fess.system.* prefix to crawler/thumbnail child processes automatically.
+      # rank.fusion.searchers is intentionally left unset so the default (keyword)
+      # and multi_modal (CLIP) searchers are combined via hybrid rank fusion.
       FESS_JAVA_OPTS: >-
         -Xms${FESS_HEAP:-1g} -Xmx${FESS_HEAP:-1g}
         -Dfess.config.crawler.document.cache.enabled=false
@@ -133,16 +144,18 @@ services:
         -Dfess.config.query.additional.api.response.fields=searcher
         -Dfess.config.paging.search.page.size=${SEARCH_PAGE_SIZE:-20}
         -Dfess.config.index.user.initial_password=${FESS_ADMIN_PASSWORD:-admin}
-        -Dthumbnail.width=512
-        -Dthumbnail.height=512
-        -Dfess.config.job.system.property.filter.pattern=fess.multimodal.*|clip.*
-        -Dfess.multimodal.content.field=content_vector
-        -Dfess.multimodal.content.dimension=${MULTIMODAL_DIMENSION:-512}
-        -Dfess.multimodal.content.method=hnsw
-        -Dfess.multimodal.content.engine=lucene
-        -Dfess.multimodal.content.space_type=cosinesimil
-        -Dfess.multimodal.min_score=${CLIP_MIN_SCORE:-0.56}
-        -Dclip.server.endpoint=http://clip_server:51000
+        -Dfess.config.thumbnail.html.image.thumbnail.width=${THUMBNAIL_PX:-512}
+        -Dfess.config.thumbnail.html.image.thumbnail.height=${THUMBNAIL_PX:-512}
+        -Dfess.system.content_chunker.enabled=true
+        -Dfess.system.content_chunker.search.enabled=true
+        -Dfess.system.content_chunker.embedding.name=clip
+        -Dfess.system.content_chunker.embedding.dimension=${MULTIMODAL_DIMENSION:-512}
+        -Dfess.system.content_chunker.embedding.clip.api.url=http://clip_server:51000
+        -Dfess.system.content_chunker.search.knn.method=hnsw
+        -Dfess.system.content_chunker.search.knn.engine=${KNN_ENGINE:-lucene}
+        -Dfess.system.content_chunker.search.knn.space_type=cosinesimil
+        -Dfess.system.content_chunker.search.knn.k=${KNN_K:-100}
+        -Dfess.system.content_chunker.search.min_score=${CLIP_MIN_COSINE:-0.12}
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v2/health || exit 1"]
       interval: 30s
@@ -155,6 +168,13 @@ services:
       - ./data/fess/var/log/fess:/var/log/fess
       - ./data/fess/usr/share/fess/app/WEB-INF/plugin:/usr/share/fess/app/WEB-INF/plugin
       - ./data/fess/usr/share/fess/app/themes/${THEME_NAME:-mosaic}:/usr/share/fess/app/themes/${THEME_NAME:-mosaic}
+      # generate-thumbnail with image_size rewritten to ${THUMBNAIL_SIZE}; the shipped
+      # script hardcodes 100x100, which is too small for a thumbnail-first gallery.
+      # Generated by bin/setup.sh from the pinned image. NOTE: this script only
+      # covers command-based generation (images, PDF, Office). HTML-page thumbnails
+      # are produced in Java by HtmlTagBasedGenerator, whose own default is 100x100 --
+      # that is what thumbnail.html.image.thumbnail.* above raises.
+      - ./data/fess/bin/generate-thumbnail:/usr/share/fess/bin/generate-thumbnail:ro
     logging:
       driver: json-file
       options:
@@ -163,25 +183,24 @@ services:
     networks:
       - multimodal_net
 
-  # One-shot: after fess01 is healthy, ensure the document index carries the
-  # multimodal vector mapping (content_vector), logging in via the LastaFlute admin
-  # form flow and triggering Admin > Maintenance > Reindex with replaceAliases=on.
-  # Idempotent: no-ops when content_vector is already present, so it is safe on
-  # every restart. See bin/init-fess-index.sh.
-  init-fess-index:
+  # One-shot: after fess01 is healthy, verify that the document index carries the
+  # core's content_chunk_vector kNN mapping at the configured dimension/engine.
+  # Fess 15.8 bakes that mapping in statically when it creates the index, so there is
+  # no reindex workaround any more (15.7's init-fess-index.sh is gone) — this only
+  # fails fast when the index predates the configuration. See bin/init-fess-verify.sh.
+  init-fess-verify:
     image: ${ALPINE_IMAGE:-alpine:3.21}
     depends_on:
       fess01:
         condition: service_healthy
     environment:
-      - FESS_URL=http://fess01:8080
       - SEARCH_ENGINE_HTTP_URL=http://search01:9200
-      - FESS_ADMIN_PASSWORD=${FESS_ADMIN_PASSWORD:-admin}
-      - MAX_WAIT=${MAX_WAIT:-900}
       - MULTIMODAL_DIMENSION=${MULTIMODAL_DIMENSION:-512}
+      - KNN_ENGINE=${KNN_ENGINE:-lucene}
+      - MAX_WAIT=${CHUNK_SETUP_MAX_WAIT:-300}
     volumes:
-      - ./bin/init-fess-index.sh:/init-fess-index.sh:ro
-    entrypoint: ["sh", "/init-fess-index.sh"]
+      - ./bin/init-fess-verify.sh:/init-fess-verify.sh:ro
+    entrypoint: ["/bin/sh", "-c", "apk add --no-cache curl jq >/dev/null && exec sh /init-fess-verify.sh"]
     restart: "no"
     networks:
       - multimodal_net
