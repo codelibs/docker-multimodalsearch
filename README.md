@@ -18,8 +18,9 @@ lightbox, per-result "Keyword / Visual / Blend" badges) instead of a classic res
 >   `content_chunker.*` setting must be passed as `-Dfess.system.*`. If you are coming
 >   from the 15.7 version of this stack, read
 >   [Upgrading from 15.7](#upgrading-from-157) before you start anything.
-> - `fess-webapp-multimodal:15.8.0` is **not released yet**. See
->   [Installing the plugin (temporary)](#installing-the-plugin-temporary).
+> - **Upgrading an existing stack to Fess 15.9?** Its scheduled jobs are still Groovy,
+>   which 15.9 no longer runs out of the box. Read
+>   [Upgrading from 15.8 to 15.9](#upgrading-from-158-to-159) first.
 
 ## Architecture
 
@@ -188,8 +189,7 @@ This host-side script is safe to re-run and:
 > the pinned image. It still never talks to a running Fess or OpenSearch, and it never
 > downloads plugin jars.
 
-**About the theme sync — read if `mosaic` 2.0.0 is not yet on the `fess-themes` `main`
-branch:** `bin/setup.sh` resolves the theme source in this order:
+**About the theme sync:** `bin/setup.sh` resolves the theme source in this order:
 
 - If `FESS_THEMES_DIR` is set in `.env`, the theme is copied from
   `${FESS_THEMES_DIR}/themes/${THEME_NAME}` in a **local `fess-themes` checkout** —
@@ -198,13 +198,15 @@ branch:** `bin/setup.sh` resolves the theme source in this order:
   `https://github.com/codelibs/fess-themes.git`) at ref `FESS_THEMES_REF` (default
   `main`) and copies `themes/${THEME_NAME}` from there.
 
-This stack needs **mosaic 2.0.0** (`minFessVersion: 15.8`). Mosaic 1.x quotes the query
-whenever a filter is active, which on 15.8 trips the core query-syntax gate and turns
-every filtered search keyword-only. Until 2.0.0 lands on `main`, either:
+This stack needs **mosaic 2.0.0 or later**. Mosaic 1.x quotes the query whenever a
+filter is active, which on 15.8 trips the core query-syntax gate and turns every
+filtered search keyword-only.
 
-- point `FESS_THEMES_DIR` at a local `fess-themes` checkout that already has it, **or**
-- set `FESS_THEMES_REF` in `.env` to that development branch name before running
-  `bin/setup.sh`.
+`fess-themes` `main` follows the newest Fess line: it currently ships mosaic 15.9.x
+(`minFessVersion: 15.9`), which also renders on Fess 15.8.0. `fess-themes` has no
+per-version tags, and `FESS_THEMES_REF` can only name a branch, so to pin the build
+this stack was released with on 15.8 (mosaic 2.0.0), check out `fess-themes` at commit
+`ce1e5ca` and point `FESS_THEMES_DIR` at that checkout.
 
 Verify with:
 
@@ -295,18 +297,14 @@ crawled pages/PDF.
 docker compose down
 ```
 
-## Installing the plugin (temporary)
+## Installing the plugin
 
-> **This section is temporary and will be removed once `fess-webapp-multimodal:15.8.0`
-> ships.**
+`FESS_PLUGINS` (default `fess-webapp-multimodal:15.8.0`) is installed by the Fess image
+at startup from `https://maven.codelibs.org`: the release repository for a release
+version, the snapshot repository for a `-SNAPSHOT` version. Keep the plugin version in
+step with `FESS_VERSION`.
 
-`compose.yaml` defaults `FESS_PLUGINS` to `fess-webapp-multimodal:15.8.0`, but **that
-release does not exist yet**: `https://maven.codelibs.org/release/org/codelibs/fess/fess-webapp-multimodal/`
-is empty. Only a `15.8.0-SNAPSHOT` is published, and Fess's default
-`plugin.repositories` does **not** include the snapshot repository — so `FESS_PLUGINS`
-cannot fetch it either.
-
-Until the release, build the jar yourself and install it as a local jar:
+To run a locally built jar instead:
 
 1. Leave `FESS_PLUGINS` **empty** in `.env`:
    ```
@@ -321,13 +319,15 @@ Until the release, build the jar yourself and install it as a local jar:
    ```sh
    cd /path/to/fess-webapp-multimodal
    mvn clean package
-   cp target/fess-webapp-multimodal-15.8.0-SNAPSHOT.jar \
+   cp target/fess-webapp-multimodal-*.jar \
       /path/to/docker-multimodalsearch/data/fess/usr/share/fess/app/WEB-INF/plugin/
    ```
 4. `docker compose up -d` (or `docker compose restart fess01` if it was already up).
 
-Verify the plugin is live by checking that a search response carries `multi_modal` in
-its `searcher` field — see [Troubleshooting](#troubleshooting).
+Either way, verify the plugin is live by checking that a search response carries
+`multi_modal` in its `searcher` field — see [Troubleshooting](#troubleshooting). A
+plugin that fails to download does not stop Fess from starting: every container still
+reports healthy, and search quietly answers keyword-only.
 
 ## When visual search does *not* run
 
@@ -350,7 +350,9 @@ kNN filter (applied both inside the kNN query, for efficient filtering, and on t
 bool, which is what actually enforces it). This covers any field core's `QueryProcessor`
 can filter on — `label`, `host`, `site`, `filetype`, `mimetype`, `lang`, and so on;
 there is no allowlist to keep in sync. Verified live: `q=red car filetype:jpg` returns
-`searcher: ["multi_modal"]` and only jpg hits.
+`searcher: ["multi_modal"]` and only jpg hits. Fess 15.9 moved this query splitter into
+the core (`org.codelibs.fess.query.StructuredQuerySplitter`), and plugin 15.9 uses the
+core one; the behaviour is the same.
 
 ## The Content Chunk Vector Indexer job
 
@@ -434,7 +436,7 @@ Keys added or changed in this version:
 | `THUMBNAIL_SIZE` | `512x512` | **New.** Rewritten into `generate-thumbnail` by `bin/setup.sh`. |
 | `CHUNK_SETUP_MAX_WAIT` | `300` | **New.** Seconds `init-fess-verify` waits for the mapping. Replaces `MAX_WAIT`. |
 | `CLIP_MIN_COSINE` | `0.12` | **Renamed** from `CLIP_MIN_SCORE` (`0.56`). Units changed — see below. |
-| `FESS_PLUGINS` | `fess-webapp-multimodal:15.8.0` | Was `…:15.7.x`. Not released yet — see [Installing the plugin](#installing-the-plugin-temporary). |
+| `FESS_PLUGINS` | `fess-webapp-multimodal:15.8.0` | Was `…:15.7.x`. See [Installing the plugin](#installing-the-plugin). |
 | `MAX_WAIT` | — | **Removed.** Superseded by `CHUNK_SETUP_MAX_WAIT`. |
 
 Unchanged and still used: `FESS_IMAGE`, `OPENSEARCH_IMAGE`, `NGINX_IMAGE`,
@@ -460,6 +462,64 @@ Fess reports `score = 0.5929352`, which is exactly `(1 + 0.18587) / 2`. If you h
 
 (With a `faiss` engine the conversion is `1 / (2 - cos)` instead, and with a non-cosine
 `space_type` the cutoff is skipped with a warning. This stack pins `cosinesimil`.)
+
+## Upgrading from 15.8 to 15.9
+
+Fess 15.9 moved the Groovy script engine out of core into the `fess-script-groovy`
+plugin and made JavaScript the default script type. An upgrade does not rewrite stored
+settings, so a 15.8 install keeps Groovy on all 14 bundled scheduled jobs (and on any
+data config you created without a `script_type`). This stack does not get the Groovy
+plugin: the `WEB-INF/plugin` bind mount hides the copy baked into the 15.9 image. After
+the upgrade, the Default Crawler ends with `fail`, and the only traces are a startup WARN
+(`Settings use the script engine groovy, which is not registered`) and
+`groovy is not found` per job. Search keeps working, so this is easy to miss.
+
+The index, the stored vectors and the thumbnails carry over as they are; the upgrade
+needs no reindex and no re-crawl. Switch the stored scripts to JavaScript once, right
+after the upgrade:
+
+1. In `.env`, set `FESS_VERSION=15.9.0` and
+   `FESS_PLUGINS=fess-webapp-multimodal:15.9.0` (and `FESS_IMAGE`, if you set it).
+2. Re-run setup (it regenerates `generate-thumbnail` from the new image and re-syncs the
+   theme) and start the stack:
+   ```sh
+   bash bin/setup.sh
+   docker compose up -d
+   ```
+3. Create an access token for the admin API: **Admin > System > Access Token** >
+   **Create New**, with the permission `{role}admin-api`.
+4. Run the migration (it needs `python3` on the host):
+   ```sh
+   export FESS_ACCESS_TOKEN=<the token>
+   bash bin/migrate-to-javascript.sh --dry-run   # lists what would change
+   bash bin/migrate-to-javascript.sh
+   docker compose restart fess01                 # optional: clears the startup warning
+   ```
+   Set `FESS_ENDPOINT` if Fess is not at `http://localhost:8080`. Delete the token
+   afterwards if you have no other use for it.
+
+`bin/migrate-to-javascript.sh`:
+
+- sets every scheduled job whose script type is Groovy (or unset) to JavaScript. The two
+  Groovy-only constructs in the bundled 15.8 jobs are rewritten on the way — the `1000L`
+  long literal in *Thumbnail Purger* and the `org.opensearch` package that Fess 15.9
+  replaced with its own fork in *Index Exporter* — so the result is exactly the job set
+  Fess 15.9 ships;
+- adds `script_type=javascript` to the Parameter of every data config that has none (or
+  `groovy`);
+- prints every setting it changes, changes nothing on a second run, and refuses to run
+  against Fess 15.8, which has no JavaScript engine.
+
+A job or handler script you customized with other Groovy syntax is switched as well and
+has to be rewritten by hand. The alternative is to keep Groovy: append
+`fess-script-groovy:15.9.0` to `FESS_PLUGINS` (space-separated).
+
+A fresh 15.9 install needs none of this: its jobs are created as JavaScript.
+
+**Trying 15.9 before its release.** The `.env.example` pins stay at 15.8.0 until 15.9.0
+is released. To run the development build, set
+`FESS_IMAGE=ghcr.io/codelibs/fess:snapshot-noble`, `FESS_VERSION=15.9.0` and
+`FESS_PLUGINS=fess-webapp-multimodal:15.9.0-SNAPSHOT`.
 
 ## Upgrading from 15.7
 
@@ -579,7 +639,7 @@ After upgrading `clip_server` or its model:
 
 ## Theme
 
-The default theme is `mosaic` **2.0.0** (`THEME_NAME=mosaic` in `.env`), a purpose-built
+The default theme is `mosaic` (`THEME_NAME=mosaic` in `.env`), a purpose-built
 gallery UI: a masonry grid of thumbnails, an image lightbox, and a "Keyword / Visual /
 Blend" badge on each result showing whether it was matched by BM25, CLIP, or both. It is
 authored and versioned in the separate
