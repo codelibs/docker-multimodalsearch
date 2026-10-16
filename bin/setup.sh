@@ -44,7 +44,7 @@ THEME_NAME="${THEME_NAME:-mosaic}"
 FESS_THEMES_REPO="${FESS_THEMES_REPO:-https://github.com/codelibs/fess-themes.git}"
 FESS_THEMES_REF="${FESS_THEMES_REF:-main}"
 THUMBNAIL_SIZE="${THUMBNAIL_SIZE:-512x512}"
-FESS_VERSION="${FESS_VERSION:-15.8.0}"
+FESS_VERSION="${FESS_VERSION:-15.9.0}"
 FESS_IMAGE="${FESS_IMAGE:-ghcr.io/codelibs/fess:${FESS_VERSION}-noble}"
 
 # clip_server runs as a non-root user (docker/clip-server/Dockerfile creates the

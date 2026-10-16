@@ -10,7 +10,7 @@ lightbox, per-result "Keyword / Visual / Blend" badges) instead of a classic res
 > **Read this first:**
 >
 > - This stack pins the `-noble` Fess image variant
->   (`ghcr.io/codelibs/fess:15.8.0-noble`), not the default Alpine image. Without it,
+>   (`ghcr.io/codelibs/fess:15.9.0-noble`), not the default Alpine image. Without it,
 >   image/PDF/Office thumbnails silently fail to render and the gallery shows broken
 >   tiles. See [The `-noble` image](#the--noble-image).
 > - **Fess 15.8 moved vector search into the core.** Vectors now live in the core
@@ -30,7 +30,7 @@ All five services run on a single Docker Compose network, `multimodal_net`:
                             ┌─────────────────────────────┐
    browser ────────────────▶│ fess01                       │  http://localhost:8080
    (search UI, admin UI)    │ ghcr.io/codelibs/fess         │
-                            │ :15.8.0-noble                 │
+                            │ :15.9.0-noble                 │
                             │ + fess-webapp-multimodal       │
                             │ + mosaic gallery theme         │
                             └──────┬────────────┬──────────┘
@@ -40,7 +40,7 @@ All five services run on a single Docker Compose network, `multimodal_net`:
                      ┌───────────────────┐   ┌───────────────────────┐
                      │ search01            │   │ clip_server             │
                      │ fess-opensearch      │   │ custom open_clip server │
-                     │ :3.8.0               │   │ CLIP model (~1.6 GB     │
+                     │ :3.9.0               │   │ CLIP model (~1.6 GB     │
                      │ 127.0.0.1:9200        │   │ download on first boot)│
                      │ (loopback only)       │   └───────────────────────┘
                      └─────────┬────────────┘
@@ -60,7 +60,7 @@ All five services run on a single Docker Compose network, `multimodal_net`:
                      └───────────────────┘  published to the host)
 ```
 
-- **`search01`** — OpenSearch 3.8 (`ghcr.io/codelibs/fess-opensearch:3.8.0`), roles
+- **`search01`** — OpenSearch 3.9 (`ghcr.io/codelibs/fess-opensearch:3.9.0`), roles
   `cluster_manager,data,ingest`. Stores documents and their CLIP vectors and serves both
   the BM25 and kNN branches of every query. Note the **absence of the `ml` role**: all
   embeddings come from `clip_server`, never from OpenSearch ML Commons, so the node does
@@ -77,7 +77,7 @@ All five services run on a single Docker Compose network, `multimodal_net`:
   as `http://content/` on the internal network only, so Fess's crawler and thumbnail
   generator fetch real HTTP responses (thumbnails render properly) instead of hitting
   the `file://` dead-end.
-- **`fess01`** — Fess `15.8.0-noble` with the `fess-webapp-multimodal` plugin and the
+- **`fess01`** — Fess `15.9.0-noble` with the `fess-webapp-multimodal` plugin and the
   `mosaic` theme. Combines the `default` (BM25) and `multi_modal` (CLIP) searchers via
   hybrid rank fusion — `rank.fusion.searchers` is intentionally left unset so neither
   replaces the other. `fess01` waits for `clip_server` to be **healthy** (not merely
@@ -299,7 +299,7 @@ docker compose down
 
 ## Installing the plugin
 
-`FESS_PLUGINS` (default `fess-webapp-multimodal:15.8.0`) is installed by the Fess image
+`FESS_PLUGINS` (default `fess-webapp-multimodal:15.9.0`) is installed by the Fess image
 at startup from `https://maven.codelibs.org`: the release repository for a release
 version, the snapshot repository for a `-SNAPSHOT` version. Keep the plugin version in
 step with `FESS_VERSION`.
@@ -373,10 +373,10 @@ Fess 15.8 ships a scheduled job named **Content Chunk Vector Indexer**
 This stack pins:
 
 ```
-FESS_IMAGE=ghcr.io/codelibs/fess:15.8.0-noble
+FESS_IMAGE=ghcr.io/codelibs/fess:15.9.0-noble
 ```
 
-The **default (Alpine-based) `ghcr.io/codelibs/fess:15.8.0` image ships no ImageMagick,
+The **default (Alpine-based) `ghcr.io/codelibs/fess:15.9.0` image ships no ImageMagick,
 poppler, or unoconv/LibreOffice**. Without that tooling, Fess can still generate HTML
 thumbnails, but image, PDF, and Office document thumbnails silently fail to render — the
 gallery would show blank/broken tiles for most of the demo corpus. The `-noble` (Ubuntu
@@ -429,14 +429,14 @@ Keys added or changed in this version:
 
 | Key | Default | Notes |
 |---|---|---|
-| `FESS_VERSION` | `15.8.0` | **New.** Feeds `ghcr.io/codelibs/fess:${FESS_VERSION}-noble`. |
-| `OPENSEARCH_VERSION` | `3.8.0` | **New.** Feeds `ghcr.io/codelibs/fess-opensearch:${OPENSEARCH_VERSION}`. |
+| `FESS_VERSION` | `15.9.0` | **New.** Feeds `ghcr.io/codelibs/fess:${FESS_VERSION}-noble`. |
+| `OPENSEARCH_VERSION` | `3.9.0` | **New.** Feeds `ghcr.io/codelibs/fess-opensearch:${OPENSEARCH_VERSION}`. |
 | `KNN_K` | `100` | **New.** Neighbours requested per shard (`content_chunker.search.knn.k`). |
 | `KNN_ENGINE` | `lucene` | **New.** kNN engine baked into the mapping; also checked by `init-fess-verify`. |
 | `THUMBNAIL_SIZE` | `512x512` | **New.** Rewritten into `generate-thumbnail` by `bin/setup.sh`. |
 | `CHUNK_SETUP_MAX_WAIT` | `300` | **New.** Seconds `init-fess-verify` waits for the mapping. Replaces `MAX_WAIT`. |
 | `CLIP_MIN_COSINE` | `0.12` | **Renamed** from `CLIP_MIN_SCORE` (`0.56`). Units changed — see below. |
-| `FESS_PLUGINS` | `fess-webapp-multimodal:15.8.0` | Was `…:15.7.x`. See [Installing the plugin](#installing-the-plugin). |
+| `FESS_PLUGINS` | `fess-webapp-multimodal:15.9.0` | Was `…:15.7.x`. See [Installing the plugin](#installing-the-plugin). |
 | `MAX_WAIT` | — | **Removed.** Superseded by `CHUNK_SETUP_MAX_WAIT`. |
 
 Unchanged and still used: `FESS_IMAGE`, `OPENSEARCH_IMAGE`, `NGINX_IMAGE`,
@@ -516,10 +516,9 @@ has to be rewritten by hand. The alternative is to keep Groovy: append
 
 A fresh 15.9 install needs none of this: its jobs are created as JavaScript.
 
-**Trying 15.9 before its release.** The `.env.example` pins stay at 15.8.0 until 15.9.0
-is released. To run the development build, set
-`FESS_IMAGE=ghcr.io/codelibs/fess:snapshot-noble`, `FESS_VERSION=15.9.0` and
-`FESS_PLUGINS=fess-webapp-multimodal:15.9.0-SNAPSHOT`.
+**Trying the development build.** To run the unreleased build, set
+`FESS_IMAGE=ghcr.io/codelibs/fess:snapshot-noble` and
+`FESS_PLUGINS=fess-webapp-multimodal:<next version>-SNAPSHOT`.
 
 ## Upgrading from 15.7
 
