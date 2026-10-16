@@ -104,7 +104,7 @@ services:
     # The -noble variant is REQUIRED: it carries imagemagick/unoconv/poppler-utils,
     # which generate-thumbnail needs. The default alpine image has none of them and
     # the gallery grid would render without a single thumbnail.
-    image: ${FESS_IMAGE:-ghcr.io/codelibs/fess:${FESS_VERSION:-15.9.0}-noble}
+    image: ${FESS_IMAGE:-ghcr.io/codelibs/fess:${FESS_VERSION:-snapshot}-noble}
     container_name: fess01
     restart: always
     ports:
@@ -123,7 +123,7 @@ services:
       # resolves to ".../dictionaryar/protwords.txt" and OpenSearch analyzer creation
       # (SuggestHelper) fails with "keywords_path: file not readable".
       FESS_DICTIONARY_PATH: "/usr/share/opensearch/config/dictionary/"
-      FESS_PLUGINS: "${FESS_PLUGINS-fess-webapp-multimodal:15.9.0}"
+      FESS_PLUGINS: "${FESS_PLUGINS-fess-webapp-multimodal:15.10.0-SNAPSHOT}"
       # Two config channels are in play here:
       #   -Dfess.config.*  -> fess_config.properties overrides
       #   -Dfess.system.*  -> system.properties channel (FessProp#getSystemProperty).
