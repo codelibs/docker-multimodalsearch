@@ -13,17 +13,8 @@ lightbox, per-result "Keyword / Visual / Blend" badges) instead of a classic res
 >   (`ghcr.io/codelibs/fess:snapshot-noble`), not the default Alpine image. Without it,
 >   image/PDF/Office thumbnails silently fail to render and the gallery shows broken
 >   tiles. See [The `-noble` image](#the--noble-image).
-> - **Fess 15.8 moved vector search into the core.** Vectors now live in the core
->   `content_chunk_vector` field, not the plugin's old `content_vector`, and every
->   `content_chunker.*` setting must be passed as `-Dfess.system.*`. If you are coming
->   from the 15.7 version of this stack, read
->   [Upgrading from 15.7](#upgrading-from-157) before you start anything.
-> - **Upgrading an existing stack to Fess 15.9?** Its scheduled jobs are still Groovy,
->   which 15.9 no longer runs out of the box. Read
->   [Upgrading from 15.8 to 15.9](#upgrading-from-158-to-159) first.
->   **Upgrading an existing 15.9 stack to 15.10?** Image documents crawled before the
->   upgrade keep their old `content` until they are re-indexed. See
->   [Upgrading from 15.9 to 15.10](#upgrading-from-159-to-1510).
+
+> **Upgrading from an earlier version?** See [UPGRADING.md](UPGRADING.md).
 
 ## Architecture
 
@@ -308,6 +299,11 @@ at startup from `https://maven.codelibs.org`: the release repository for a relea
 version, the snapshot repository for a `-SNAPSHOT` version. Keep the plugin version in
 step with `FESS_VERSION`.
 
+**Pinning a release.** The defaults follow the development build
+(`FESS_VERSION=snapshot`, `FESS_PLUGINS=fess-webapp-multimodal:15.10.0-SNAPSHOT`).
+For a stable stack set `FESS_VERSION=15.9.0` and
+`FESS_PLUGINS=fess-webapp-multimodal:15.9.0` (and `FESS_IMAGE`, if you set it).
+
 To run a locally built jar instead:
 
 1. Leave `FESS_PLUGINS` **empty** in `.env`:
@@ -439,7 +435,7 @@ Keys added or changed in this version:
 | `KNN_ENGINE` | `lucene` | **New.** kNN engine baked into the mapping; also checked by `init-fess-verify`. |
 | `THUMBNAIL_SIZE` | `512x512` | **New.** Rewritten into `generate-thumbnail` by `bin/setup.sh`. |
 | `CHUNK_SETUP_MAX_WAIT` | `300` | **New.** Seconds `init-fess-verify` waits for the mapping. Replaces `MAX_WAIT`. |
-| `CLIP_MIN_COSINE` | `0.12` | **Renamed** from `CLIP_MIN_SCORE` (`0.56`). Units changed — see below. |
+| `CLIP_MIN_COSINE` | `0.12` | **Renamed** from `CLIP_MIN_SCORE` (`0.56`). Units changed — see [UPGRADING.md](UPGRADING.md#clip_min_cosine-the-units-changed). |
 | `FESS_PLUGINS` | `fess-webapp-multimodal:15.10.0-SNAPSHOT` | Was `…:15.7.x`. See [Installing the plugin](#installing-the-plugin). |
 | `MAX_WAIT` | — | **Removed.** Superseded by `CHUNK_SETUP_MAX_WAIT`. |
 
@@ -448,155 +444,6 @@ Unchanged and still used: `FESS_IMAGE`, `OPENSEARCH_IMAGE`, `NGINX_IMAGE`,
 `CLIP_DEVICE`, `CLIP_MAX_IMAGE_PIXELS`, `CLIP_UID`, `CLIP_GID`, `FESS_HEAP`,
 `OPENSEARCH_HEAP`, `OPENSEARCH_HEAP_PROD`, `FESS_ADMIN_PASSWORD`, `SEARCH_PAGE_SIZE`,
 `THEME_NAME`, `FESS_THEMES_REPO`, `FESS_THEMES_REF`, `FESS_THEMES_DIR`, `DOMAIN`.
-
-### `CLIP_MIN_COSINE`: the units changed
-
-15.7's `CLIP_MIN_SCORE` was an **engine score**. 15.8's
-`content_chunker.search.min_score` is a **raw cosine similarity** in `0..1`, and core
-converts it to the engine's scale itself. With `lucene` + `cosinesimil` — what this
-stack uses — the engine score is `(1 + cos) / 2`, so:
-
-```
-0.56 (old engine score)  ->  2 * 0.56 - 1  =  0.12 (new cosine)
-```
-
-Verified on this stack: for `mountain sunset`, `sunset.jpg` has cosine `0.18587` and
-Fess reports `score = 0.5929352`, which is exactly `(1 + 0.18587) / 2`. If you had tuned
-`CLIP_MIN_SCORE`, convert it with `2 * old - 1` rather than copying the number across.
-
-(With a `faiss` engine the conversion is `1 / (2 - cos)` instead, and with a non-cosine
-`space_type` the cutoff is skipped with a warning. This stack pins `cosinesimil`.)
-
-## Upgrading from 15.9 to 15.10
-
-The index, the stored vectors and the scheduled jobs carry over: the jobs are already
-JavaScript, so nothing needs migrating, and no reindex is required. Verified on a stack
-upgraded from Fess 15.9.0, where all stored vectors and the document count were
-unchanged after the upgrade and a re-crawl.
-
-1. Update the repo and `.env` (the defaults already follow 15.10: `FESS_VERSION=snapshot`,
-   `FESS_PLUGINS=fess-webapp-multimodal:15.10.0-SNAPSHOT`, `FESS_THEMES_REF=main`).
-   If your `.env` pins 15.9, remove those pins.
-2. Re-run setup (it regenerates `generate-thumbnail` from the new image and re-syncs the
-   theme) and recreate the stack:
-   ```sh
-   bash bin/setup.sh
-   docker compose pull
-   docker compose up -d
-   ```
-3. Hard-reload the browser (or clear the site's cache). Theme assets are served with
-   `Cache-Control: max-age=86400`, so the old mosaic can linger for a day.
-
-**Re-index the image documents.** Fess 15.10 stores only the descriptive metadata of an
-image (title, description, creator) in `content`; 15.9 stored a full metadata dump, up to
-about 34,000 characters per image. A re-crawl does not rewrite documents the crawler
-considers unchanged, so documents crawled on 15.9 keep the long `content`. A crawl on a
-fresh index produces `content` of at most a few hundred characters. To get the new
-behaviour for existing documents, delete them and crawl again, as described under
-[Thumbnail size](#thumbnail-size) (that crawl rebuilds the vectors and the thumbnails).
-
-## Upgrading from 15.8 to 15.9
-
-Fess 15.9 moved the Groovy script engine out of core into the `fess-script-groovy`
-plugin and made JavaScript the default script type. An upgrade does not rewrite stored
-settings, so a 15.8 install keeps Groovy on all 14 bundled scheduled jobs (and on any
-data config you created without a `script_type`). This stack does not get the Groovy
-plugin: the `WEB-INF/plugin` bind mount hides the copy baked into the 15.9 image. After
-the upgrade, the Default Crawler ends with `fail`, and the only traces are a startup WARN
-(`Settings use the script engine groovy, which is not registered`) and
-`groovy is not found` per job. Search keeps working, so this is easy to miss.
-
-The index, the stored vectors and the thumbnails carry over as they are; the upgrade
-needs no reindex and no re-crawl. Switch the stored scripts to JavaScript once, right
-after the upgrade:
-
-1. In `.env`, set `FESS_VERSION=15.9.0` and
-   `FESS_PLUGINS=fess-webapp-multimodal:15.9.0` (and `FESS_IMAGE`, if you set it).
-2. Re-run setup (it regenerates `generate-thumbnail` from the new image and re-syncs the
-   theme) and start the stack:
-   ```sh
-   bash bin/setup.sh
-   docker compose up -d
-   ```
-3. Create an access token for the admin API: **Admin > System > Access Token** >
-   **Create New**, with the permission `{role}admin-api`.
-4. Run the migration (it needs `python3` on the host):
-   ```sh
-   export FESS_ACCESS_TOKEN=<the token>
-   bash bin/migrate-to-javascript.sh --dry-run   # lists what would change
-   bash bin/migrate-to-javascript.sh
-   docker compose restart fess01                 # optional: clears the startup warning
-   ```
-   Set `FESS_ENDPOINT` if Fess is not at `http://localhost:8080`. Delete the token
-   afterwards if you have no other use for it.
-
-`bin/migrate-to-javascript.sh`:
-
-- sets every scheduled job whose script type is Groovy (or unset) to JavaScript. The two
-  Groovy-only constructs in the bundled 15.8 jobs are rewritten on the way — the `1000L`
-  long literal in *Thumbnail Purger* and the `org.opensearch` package that Fess 15.9
-  replaced with its own fork in *Index Exporter* — so the result is exactly the job set
-  Fess 15.9 ships;
-- adds `script_type=javascript` to the Parameter of every data config that has none (or
-  `groovy`);
-- prints every setting it changes, changes nothing on a second run, and refuses to run
-  against Fess 15.8, which has no JavaScript engine.
-
-A job or handler script you customized with other Groovy syntax is switched as well and
-has to be rewritten by hand. The alternative is to keep Groovy: append
-`fess-script-groovy:15.9.0` to `FESS_PLUGINS` (space-separated).
-
-A fresh 15.9 install needs none of this: its jobs are created as JavaScript.
-
-**Pinning a release.** The defaults follow the development build
-(`FESS_VERSION=snapshot`, `FESS_PLUGINS=fess-webapp-multimodal:15.10.0-SNAPSHOT`).
-For a stable stack set `FESS_VERSION=15.9.0` and
-`FESS_PLUGINS=fess-webapp-multimodal:15.9.0` (and `FESS_IMAGE`, if you set it).
-
-## Upgrading from 15.7
-
-Vector search moved from the plugin into the core, so nearly every setting moved with
-it. `compose.yaml` in this repo is already migrated — this table is for anyone carrying
-a customised deployment forward.
-
-| 15.7 (plain `-D`) | 15.8 (`-Dfess.system.*`) |
-|---|---|
-| `clip.server.endpoint` | `content_chunker.embedding.clip.api.url` |
-| `clip.image.width` / `.height` / `.max_width` / `.max_height` / `.format` | `content_chunker.embedding.clip.image.width` / `.height` / `.max_width` / `.max_height` / `.format` |
-| `fess.multimodal.content.dimension` | `content_chunker.embedding.dimension` |
-| `fess.multimodal.content.method` / `.engine` / `.space_type` | `content_chunker.search.knn.method` / `.engine` / `.space_type` |
-| `fess.multimodal.content.field` | **Removed** — the field is always `content_chunk_vector` |
-| `fess.multimodal.min_score` (engine score) | `content_chunker.search.min_score` (**raw cosine** — see [above](#clip_min_cosine-the-units-changed)) |
-
-Also removed:
-
-- **`-Dfess.config.job.system.property.filter.pattern`** — no longer needed. `ExecJob`
-  forwards the `fess.system.` prefix to child processes automatically.
-- **`-Dthumbnail.width` / `-Dthumbnail.height`** — these keys never existed in the Fess
-  core and did nothing. Use `THUMBNAIL_SIZE` (see [Thumbnail size](#thumbnail-size)).
-
-Newly required:
-
-- **`-Dfess.system.content_chunker.enabled=true`** and
-  **`-Dfess.system.content_chunker.search.enabled=true`** turn the core's chunk pipeline
-  and its search branch on. `content_chunker.search.enabled` is read once at startup, so
-  enabling it later needs a restart.
-- **`-Dfess.system.content_chunker.embedding.name=clip`** points core's
-  `EmbeddingClientManager` at the plugin's `clipEmbeddingClient`.
-
-Migration steps:
-
-1. Update `.env` (see [Configuration reference](#configuration-reference)); convert
-   `CLIP_MIN_SCORE` to `CLIP_MIN_COSINE`.
-2. Remove any `content_chunker.*` lines from
-   `data/fess/opt/fess/system.properties` — file values win over `-Dfess.system.*`.
-3. `bash bin/setup.sh` (regenerates `generate-thumbnail` and re-syncs the theme; make
-   sure you get **mosaic 2.0.0**).
-4. Start the stack. The 15.7 index has no `content_chunk_vector` field, so
-   `init-fess-verify` will fail with an explicit message. Run **Admin > Maintenance >
-   Reindex** with *Update aliases* checked to recreate the index with the new mapping.
-5. **Re-crawl.** A reindex copies documents; it does not recompute embeddings, and 15.7's
-   `content_vector` values cannot be carried into `content_chunk_vector`.
 
 ## Model swap
 
