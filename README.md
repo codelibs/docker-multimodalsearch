@@ -21,6 +21,9 @@ lightbox, per-result "Keyword / Visual / Blend" badges) instead of a classic res
 > - **Upgrading an existing stack to Fess 15.9?** Its scheduled jobs are still Groovy,
 >   which 15.9 no longer runs out of the box. Read
 >   [Upgrading from 15.8 to 15.9](#upgrading-from-158-to-159) first.
+>   **Upgrading an existing 15.9 stack to 15.10?** Image documents crawled before the
+>   upgrade keep their old `content` until they are re-indexed. See
+>   [Upgrading from 15.9 to 15.10](#upgrading-from-159-to-1510).
 
 ## Architecture
 
@@ -202,11 +205,12 @@ This stack needs **mosaic 2.0.0 or later**. Mosaic 1.x quotes the query whenever
 filter is active, which on 15.8 trips the core query-syntax gate and turns every
 filtered search keyword-only.
 
-`fess-themes` `main` follows the newest Fess line: it currently ships mosaic 15.9.x
-(`minFessVersion: 15.9`), which also renders on Fess 15.8.0. `fess-themes` has no
-per-version tags, and `FESS_THEMES_REF` can only name a branch, so to pin the build
-this stack was released with on 15.8 (mosaic 2.0.0), check out `fess-themes` at commit
-`ce1e5ca` and point `FESS_THEMES_DIR` at that checkout.
+`fess-themes` `main` follows the newest Fess line: it currently ships mosaic 15.10.x
+(`minFessVersion: 15.10`). Each released Fess line also has a maintenance branch, so
+when you pin a release, set `FESS_THEMES_REF` to that branch: `15.9.x` for a Fess 15.9
+stack (mosaic 15.9.x, `minFessVersion: 15.9`). `fess-themes` has no per-version tags,
+so to pin the build this stack was released with on 15.8 (mosaic 2.0.0), check out
+`fess-themes` at commit `ce1e5ca` and point `FESS_THEMES_DIR` at that checkout.
 
 Verify with:
 
@@ -462,6 +466,34 @@ Fess reports `score = 0.5929352`, which is exactly `(1 + 0.18587) / 2`. If you h
 
 (With a `faiss` engine the conversion is `1 / (2 - cos)` instead, and with a non-cosine
 `space_type` the cutoff is skipped with a warning. This stack pins `cosinesimil`.)
+
+## Upgrading from 15.9 to 15.10
+
+The index, the stored vectors and the scheduled jobs carry over: the jobs are already
+JavaScript, so nothing needs migrating, and no reindex is required. Verified on a stack
+upgraded from Fess 15.9.0, where all stored vectors and the document count were
+unchanged after the upgrade and a re-crawl.
+
+1. Update the repo and `.env` (the defaults already follow 15.10: `FESS_VERSION=snapshot`,
+   `FESS_PLUGINS=fess-webapp-multimodal:15.10.0-SNAPSHOT`, `FESS_THEMES_REF=main`).
+   If your `.env` pins 15.9, remove those pins.
+2. Re-run setup (it regenerates `generate-thumbnail` from the new image and re-syncs the
+   theme) and recreate the stack:
+   ```sh
+   bash bin/setup.sh
+   docker compose pull
+   docker compose up -d
+   ```
+3. Hard-reload the browser (or clear the site's cache). Theme assets are served with
+   `Cache-Control: max-age=86400`, so the old mosaic can linger for a day.
+
+**Re-index the image documents.** Fess 15.10 stores only the descriptive metadata of an
+image (title, description, creator) in `content`; 15.9 stored a full metadata dump, up to
+about 34,000 characters per image. A re-crawl does not rewrite documents the crawler
+considers unchanged, so documents crawled on 15.9 keep the long `content`. A crawl on a
+fresh index produces `content` of at most a few hundred characters. To get the new
+behaviour for existing documents, delete them and crawl again, as described under
+[Thumbnail size](#thumbnail-size) (that crawl rebuilds the vectors and the thumbnails).
 
 ## Upgrading from 15.8 to 15.9
 
