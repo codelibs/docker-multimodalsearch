@@ -4,7 +4,7 @@
 Docker environment runs Fess with a **CLIP-powered multimodal search plugin**, so a
 plain text query — in English or Japanese — returns a **visual gallery**: CLIP-matched
 images blended with BM25-matched pages, PDFs, and Office documents, each shown by its
-thumbnail. The bundled **`mosaic`** static theme renders that gallery (masonry grid,
+thumbnail. The bundled **`mosaic`** theme renders that gallery (masonry grid,
 lightbox, per-result "Keyword / Visual / Blend" badges) instead of a classic result list.
 
 > **Read this first:**
