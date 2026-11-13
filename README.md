@@ -337,8 +337,8 @@ of these cases. All of them are expected behaviour, not bugs.
 | Condition | Why |
 |---|---|
 | **`sort=` is specified** | The kNN branch is score-ordered and cannot be re-ordered; interleaving score-ordered hits into a sorted list would make the order meaningless. Core appends `sort:<field>` to the query string, which both gates then reject. Verified: `q=red car&sort=last_modified.desc` returns `searcher: ["default"]` only. |
-| **The query contains real search syntax** | A quoted phrase, a wildcard, a range, `AND`/`OR`/`NOT`, or a leading `+`/`-`. None of those survive being turned into a single vector. Verified: `"World Landmarks"` returns keyword hits only. |
-| **`start >= 100`** | Deep pagination. `RankFusionProcessor` falls back to the main searcher once `start * 2 >= rank.fusion.window_size` (default `200`). |
+| **The query contains search syntax a vector cannot carry** | A quoted phrase, an excluded word (`-word`, `NOT word`), a boosted word (`word^2`), a range or a regular expression on the text, `allintitle:` / `allinurl:`, a lone `*` or `?`, or an `OR` over a field condition such as `(cat label:x) OR dog`. Wildcard, prefix and fuzzy words (`sunse*`, `cat?`, `cat~`) and a plain `a OR b` between words are not in this list: they are embedded as typed. Verified: `"World Landmarks"` returns keyword hits only, and `sunse*` is answered by both searchers. |
+| **`start` at or past `rank.fusion.window_size` plus the `offset`** | Deep pagination. With the default window of `200`, pages that start before `200 + offset` are cut from one fused list and run the vector branch too; `offset` is the number the previous `/api/v2/search` response returned (the themes send it back), and without it the boundary is `200`. Later pages are answered by the keyword searcher alone. |
 | **The CLIP server is unreachable** | The search degrades to keyword-only rather than failing. Good for availability, easy to miss — check `searcher` in the response. |
 
 **Not a trigger: facet, label and filetype filters.** On stock 15.8 a `filetype:` term in
