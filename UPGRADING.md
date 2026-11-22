@@ -30,6 +30,8 @@ fresh index produces `content` of at most a few hundred characters. To get the n
 behaviour for existing documents, delete them and crawl again, as described under
 [Thumbnail size](README.md#thumbnail-size) (that crawl rebuilds the vectors and the thumbnails).
 
+OpenSearch moves from 3.9.0 to 3.10.0 (`OPENSEARCH_VERSION`). `docker compose pull` and `docker compose up -d` open the existing data volume as it is: no reindex or re-crawl is needed for the engine change. A volume that 3.10.0 has opened cannot be opened by 3.9.0 again, so copy the volume first if you may need to go back.
+
 ## Upgrading from 15.8 to 15.9
 
 Fess 15.9 moved the Groovy script engine out of core into the `fess-script-groovy`

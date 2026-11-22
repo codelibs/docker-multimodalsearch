@@ -34,7 +34,7 @@ All five services run on a single Docker Compose network, `multimodal_net`:
                      ┌───────────────────┐   ┌───────────────────────┐
                      │ search01            │   │ clip_server             │
                      │ fess-opensearch      │   │ custom open_clip server │
-                     │ :3.9.0               │   │ CLIP model (~1.6 GB     │
+                     │ :3.10.0              │   │ CLIP model (~1.6 GB     │
                      │ 127.0.0.1:9200        │   │ download on first boot)│
                      │ (loopback only)       │   └───────────────────────┘
                      └─────────┬────────────┘
@@ -54,7 +54,7 @@ All five services run on a single Docker Compose network, `multimodal_net`:
                      └───────────────────┘  published to the host)
 ```
 
-- **`search01`** — OpenSearch 3.9 (`ghcr.io/codelibs/fess-opensearch:3.9.0`), roles
+- **`search01`** — OpenSearch 3.10 (`ghcr.io/codelibs/fess-opensearch:3.10.0`), roles
   `cluster_manager,data,ingest`. Stores documents and their CLIP vectors and serves both
   the BM25 and kNN branches of every query. Note the **absence of the `ml` role**: all
   embeddings come from `clip_server`, never from OpenSearch ML Commons, so the node does
@@ -430,7 +430,7 @@ Keys added or changed in this version:
 | Key | Default | Notes |
 |---|---|---|
 | `FESS_VERSION` | `snapshot` | **New.** Feeds `ghcr.io/codelibs/fess:${FESS_VERSION}-noble`. |
-| `OPENSEARCH_VERSION` | `3.9.0` | **New.** Feeds `ghcr.io/codelibs/fess-opensearch:${OPENSEARCH_VERSION}`. |
+| `OPENSEARCH_VERSION` | `3.10.0` | **New.** Feeds `ghcr.io/codelibs/fess-opensearch:${OPENSEARCH_VERSION}`. |
 | `KNN_K` | `100` | **New.** Neighbours requested per shard (`content_chunker.search.knn.k`). |
 | `KNN_ENGINE` | `lucene` | **New.** kNN engine baked into the mapping; also checked by `init-fess-verify`. |
 | `THUMBNAIL_SIZE` | `512x512` | **New.** Rewritten into `generate-thumbnail` by `bin/setup.sh`. |

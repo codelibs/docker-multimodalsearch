@@ -1,6 +1,6 @@
 services:
   search01:
-    image: ${OPENSEARCH_IMAGE:-ghcr.io/codelibs/fess-opensearch:${OPENSEARCH_VERSION:-3.9.0}}
+    image: ${OPENSEARCH_IMAGE:-ghcr.io/codelibs/fess-opensearch:${OPENSEARCH_VERSION:-3.10.0}}
     container_name: search01
     restart: always
     environment:
